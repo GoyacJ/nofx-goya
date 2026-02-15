@@ -1,0 +1,81 @@
+# NOFX repository command policy (Codex .rules)
+
+# Prevent accidental push to upstream.
+prefix_rule(
+    pattern=["git", "push", "origin"],
+    decision="forbidden",
+    justification="Push to upstream origin is disabled for this workspace. Push to remote `goya` instead.",
+    match=[
+        "git push origin main",
+        "git push origin HEAD:main",
+    ],
+    not_match=[
+        "git push goya main:master",
+    ],
+)
+
+# Repository preference: do not use Docker Compose.
+prefix_rule(
+    pattern=["docker", "compose"],
+    decision="forbidden",
+    justification="Do not use docker compose for this project workflow; run backend/frontend directly.",
+    match=[
+        "docker compose up -d",
+    ],
+)
+
+prefix_rule(
+    pattern=["docker-compose"],
+    decision="forbidden",
+    justification="Do not use docker-compose for this project workflow; run backend/frontend directly.",
+    match=[
+        "docker-compose up -d",
+    ],
+)
+
+# Block destructive git resets.
+prefix_rule(
+    pattern=["git", "reset", "--hard"],
+    decision="forbidden",
+    justification="Destructive history/file reset is not allowed unless explicitly requested by the user.",
+    match=[
+        "git reset --hard",
+        "git reset --hard HEAD~1",
+    ],
+)
+
+# Block destructive checkout discard.
+prefix_rule(
+    pattern=["git", "checkout", "--"],
+    decision="forbidden",
+    justification="Do not discard local changes with checkout -- unless explicitly requested by the user.",
+    match=[
+        "git checkout -- web/src/App.tsx",
+    ],
+)
+
+# Guard recursive deletes.
+prefix_rule(
+    pattern=["rm", "-rf"],
+    decision="prompt",
+    justification="Recursive delete can remove unrelated files. Confirm target path before execution.",
+    match=[
+        "rm -rf ./tmp-cache",
+    ],
+    not_match=[
+        "rm -r ./tmp-cache",
+    ],
+)
+
+# Guard forced pushes.
+prefix_rule(
+    pattern=["git", "push", "--force"],
+    decision="prompt",
+    justification="Force push can rewrite shared history; confirm before execution.",
+    match=[
+        "git push --force goya main:master",
+    ],
+    not_match=[
+        "git push goya main:master",
+    ],
+)
