@@ -19,6 +19,7 @@ import (
 	"nofx/trader/kucoin"
 	"nofx/trader/lighter"
 	"nofx/trader/okx"
+	qmttrader "nofx/trader/qmt"
 	"strings"
 	"sync"
 	"time"
@@ -32,7 +33,7 @@ type AutoTraderConfig struct {
 	AIModel string // AI model: "qwen" or "deepseek"
 
 	// Trading platform selection
-	Exchange   string // Exchange type: "binance", "bybit", "okx", "bitget", "gate", "hyperliquid", "aster" or "lighter"
+	Exchange   string // Exchange type: "binance", "bybit", "okx", "bitget", "gate", "hyperliquid", "aster", "lighter" or "qmt"
 	ExchangeID string // Exchange account UUID (for multi-account support)
 
 	// Binance API configuration
@@ -44,13 +45,13 @@ type AutoTraderConfig struct {
 	BybitSecretKey string
 
 	// OKX API configuration
-	OKXAPIKey    string
-	OKXSecretKey string
+	OKXAPIKey     string
+	OKXSecretKey  string
 	OKXPassphrase string
 
 	// Bitget API configuration
-	BitgetAPIKey    string
-	BitgetSecretKey string
+	BitgetAPIKey     string
+	BitgetSecretKey  string
 	BitgetPassphrase string
 
 	// Gate API configuration
@@ -58,8 +59,8 @@ type AutoTraderConfig struct {
 	GateSecretKey string
 
 	// KuCoin API configuration
-	KuCoinAPIKey    string
-	KuCoinSecretKey string
+	KuCoinAPIKey     string
+	KuCoinSecretKey  string
 	KuCoinPassphrase string
 
 	// Hyperliquid configuration
@@ -78,6 +79,12 @@ type AutoTraderConfig struct {
 	LighterAPIKeyPrivateKey string // LIGHTER API Key private key (40 bytes, for transaction signing)
 	LighterAPIKeyIndex      int    // LIGHTER API Key index (0-255)
 	LighterTestnet          bool   // Whether to use testnet
+
+	// QMT configuration
+	QMTGatewayURL   string
+	QMTAccountID    string
+	QMTGatewayToken string
+	QMTMarket       string
 
 	// AI configuration
 	UseQwen     bool
@@ -121,9 +128,9 @@ type AutoTrader struct {
 	config                AutoTraderConfig
 	trader                Trader // Use Trader interface (supports multiple platforms)
 	mcpClient             mcp.AIClient
-	store                 *store.Store             // Data storage (decision records, etc.)
+	store                 *store.Store           // Data storage (decision records, etc.)
 	strategyEngine        *kernel.StrategyEngine // Strategy engine (uses strategy configuration)
-	cycleNumber           int                      // Current cycle number
+	cycleNumber           int                    // Current cycle number
 	initialBalance        float64
 	dailyPnL              float64
 	customPrompt          string // Custom trading strategy prompt
@@ -288,6 +295,16 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 			return nil, fmt.Errorf("failed to initialize LIGHTER trader: %w", err)
 		}
 		logger.Infof("✓ LIGHTER trader initialized successfully")
+	case "qmt":
+		logger.Infof("🏦 [%s] Using QMT (A Shares) trading", config.Name)
+		marketName := config.QMTMarket
+		if marketName == "" {
+			marketName = "CN-A"
+		}
+		trader, err = qmttrader.NewQMTTrader(config.QMTGatewayURL, config.QMTAccountID, config.QMTGatewayToken, marketName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize QMT trader: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported trading platform: %s", config.Exchange)
 	}
@@ -310,7 +327,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		}
 		if foundBalance > 0 {
 			config.InitialBalance = foundBalance
-			logger.Infof("✓ [%s] Auto-fetched initial balance: %.2f USDT", config.Name, foundBalance)
+			logger.Infof("✓ [%s] Auto-fetched initial balance: %.2f %s", config.Name, foundBalance, quoteCurrencyForExchange(config.Exchange))
 			// Save to database so it persists across restarts
 			if st != nil {
 				if err := st.Trader().UpdateInitialBalance(userID, config.ID, foundBalance); err != nil {
@@ -334,6 +351,12 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	// Create strategy engine (must have strategy config)
 	if config.StrategyConfig == nil {
 		return nil, fmt.Errorf("[%s] strategy not configured", config.Name)
+	}
+	if config.Exchange == "qmt" {
+		cs := config.StrategyConfig.CoinSource
+		if cs.SourceType != "static" || cs.UseAI500 || cs.UseOITop || cs.UseOILow {
+			return nil, fmt.Errorf("qmt requires coin_source.source_type=static and does not support ai500/oi sources")
+		}
 	}
 	strategyEngine := kernel.NewStrategyEngine(config.StrategyConfig)
 	logger.Infof("✓ [%s] Using strategy engine (strategy configuration loaded)", config.Name)
@@ -376,7 +399,7 @@ func (at *AutoTrader) Run() error {
 	at.startTime = time.Now()
 
 	logger.Info("🚀 AI-driven automatic trading system started")
-	logger.Infof("💰 Initial balance: %.2f USDT", at.initialBalance)
+	logger.Infof("💰 Initial balance: %.2f %s", at.initialBalance, quoteCurrencyForExchange(at.exchange))
 	logger.Infof("⚙️  Scan interval: %v", at.config.ScanInterval)
 	logger.Info("🤖 AI will make full decisions on leverage, position size, stop loss/take profit, etc.")
 	at.monitorWg.Add(1)
@@ -599,8 +622,8 @@ func (at *AutoTrader) runCycle() error {
 		record.CandidateCoins = append(record.CandidateCoins, coin.Symbol)
 	}
 
-	logger.Infof("📊 Account equity: %.2f USDT | Available: %.2f USDT | Positions: %d",
-		ctx.Account.TotalEquity, ctx.Account.AvailableBalance, ctx.Account.PositionCount)
+	logger.Infof("📊 Account equity: %.2f %s | Available: %.2f %s | Positions: %d",
+		ctx.Account.TotalEquity, quoteCurrencyForExchange(at.exchange), ctx.Account.AvailableBalance, quoteCurrencyForExchange(at.exchange), ctx.Account.PositionCount)
 
 	// 5. Use strategy engine to call AI for decision
 	logger.Infof("🤖 Requesting AI analysis and decision... [Strategy Engine]")
@@ -925,6 +948,10 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 		CandidateCoins: candidateCoins,
 	}
 
+	if at.exchange == "qmt" {
+		at.populateQMTMarketData(ctx, strategyConfig)
+	}
+
 	// 7. Add recent closed trades (if store is available)
 	if at.store != nil {
 		// Get recent 10 closed trades for AI context
@@ -983,6 +1010,11 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 		logger.Infof("⚠️ [%s] Store is nil, cannot get recent trades", at.name)
 	}
 
+	if at.exchange == "qmt" {
+		// QMT V1 uses gateway-native market data and skips crypto-only ranking/quant sources.
+		return ctx, nil
+	}
+
 	// 8. Get quantitative data (if enabled in strategy config)
 	if strategyConfig.Indicators.EnableQuantData {
 		// Collect symbols to query (candidate coins + position coins)
@@ -1039,6 +1071,10 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 
 // executeDecisionWithRecord executes AI decision and records detailed information
 func (at *AutoTrader) executeDecisionWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
+	if at.exchange == "qmt" && (decision.Action == "open_short" || decision.Action == "close_short") {
+		return fmt.Errorf("qmt cash account does not support %s", decision.Action)
+	}
+
 	switch decision.Action {
 	case "open_long":
 		return at.executeOpenLongWithRecord(decision, actionRecord)
@@ -1083,6 +1119,112 @@ func (at *AutoTrader) ExecuteDecision(d *kernel.Decision) error {
 	return nil
 }
 
+func (at *AutoTrader) getMarketPriceForExecution(symbol string) (float64, error) {
+	normalized := market.NormalizeByExchange(at.exchange, symbol)
+	if at.exchange == "qmt" {
+		return at.trader.GetMarketPrice(normalized)
+	}
+
+	marketData, err := market.GetWithExchange(normalized, at.exchange)
+	if err != nil {
+		return 0, err
+	}
+	return marketData.CurrentPrice, nil
+}
+
+func (at *AutoTrader) populateQMTMarketData(ctx *kernel.Context, strategyConfig *store.StrategyConfig) {
+	if ctx == nil {
+		return
+	}
+
+	if ctx.MarketDataMap == nil {
+		ctx.MarketDataMap = make(map[string]*market.Data)
+	}
+
+	// Ensure static symbols are present for QMT even when strategy engine returns empty candidates.
+	if len(ctx.CandidateCoins) == 0 && strategyConfig != nil && strategyConfig.CoinSource.SourceType == "static" {
+		for _, coin := range strategyConfig.CoinSource.StaticCoins {
+			normalized := market.NormalizeByExchange(at.exchange, coin)
+			if normalized == "" {
+				continue
+			}
+			ctx.CandidateCoins = append(ctx.CandidateCoins, kernel.CandidateCoin{
+				Symbol:  normalized,
+				Sources: []string{"static"},
+			})
+		}
+	}
+
+	symbolSet := make(map[string]bool)
+
+	for i := range ctx.Positions {
+		normalized := market.NormalizeByExchange(at.exchange, ctx.Positions[i].Symbol)
+		if normalized == "" {
+			continue
+		}
+		ctx.Positions[i].Symbol = normalized
+		symbolSet[normalized] = true
+	}
+
+	for i := range ctx.CandidateCoins {
+		normalized := market.NormalizeByExchange(at.exchange, ctx.CandidateCoins[i].Symbol)
+		if normalized == "" {
+			continue
+		}
+		ctx.CandidateCoins[i].Symbol = normalized
+		symbolSet[normalized] = true
+	}
+
+	var qmtGatewayTrader *qmttrader.QMTTrader
+	if qt, ok := at.trader.(*qmttrader.QMTTrader); ok {
+		qmtGatewayTrader = qt
+	}
+
+	for symbol := range symbolSet {
+		// Skip already-populated symbols with valid prices.
+		if existing, ok := ctx.MarketDataMap[symbol]; ok && existing != nil && existing.CurrentPrice > 0 {
+			continue
+		}
+
+		data := &market.Data{
+			Symbol: symbol,
+		}
+
+		// Prefer gateway-native K-line data to derive recent prices and changes.
+		if qmtGatewayTrader != nil {
+			if klines, err := qmtGatewayTrader.GetKlines(symbol, "5m", 60); err == nil && len(klines) > 0 {
+				latest := klines[len(klines)-1].Close
+				data.CurrentPrice = latest
+
+				// 5m * 12 = 1h
+				if len(klines) > 12 && klines[len(klines)-13].Close > 0 {
+					base := klines[len(klines)-13].Close
+					data.PriceChange1h = ((latest - base) / base) * 100
+				}
+
+				// 5m * 48 = 4h
+				if len(klines) > 48 && klines[len(klines)-49].Close > 0 {
+					base := klines[len(klines)-49].Close
+					data.PriceChange4h = ((latest - base) / base) * 100
+				}
+			}
+		}
+
+		if data.CurrentPrice <= 0 {
+			if price, err := at.trader.GetMarketPrice(symbol); err == nil {
+				data.CurrentPrice = price
+			}
+		}
+
+		if data.CurrentPrice <= 0 {
+			logger.Warnf("[QMT] Skip market data for %s: no valid price", symbol)
+			continue
+		}
+
+		ctx.MarketDataMap[symbol] = data
+	}
+}
+
 // executeOpenLongWithRecord executes open long position and records detailed information
 func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
 	logger.Infof("  📈 Open long: %s", decision.Symbol)
@@ -1106,7 +1248,7 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	}
 
 	// Get current price
-	marketData, err := market.GetWithExchange(decision.Symbol, at.exchange)
+	currentPrice, err := at.getMarketPriceForExecution(decision.Symbol)
 	if err != nil {
 		return err
 	}
@@ -1159,9 +1301,9 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	}
 
 	// Calculate quantity with adjusted position size
-	quantity := actualPositionSize / marketData.CurrentPrice
+	quantity := actualPositionSize / currentPrice
 	actionRecord.Quantity = quantity
-	actionRecord.Price = marketData.CurrentPrice
+	actionRecord.Price = currentPrice
 
 	// Set margin mode
 	if err := at.trader.SetMarginMode(decision.Symbol, at.config.IsCrossMargin); err != nil {
@@ -1183,7 +1325,7 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	logger.Infof("  ✓ Position opened successfully, order ID: %v, quantity: %.4f", order["orderId"], quantity)
 
 	// Record order to database and poll for confirmation
-	at.recordAndConfirmOrder(order, decision.Symbol, "open_long", quantity, marketData.CurrentPrice, decision.Leverage, 0)
+	at.recordAndConfirmOrder(order, decision.Symbol, "open_long", quantity, currentPrice, decision.Leverage, 0)
 
 	// Record position opening time
 	posKey := decision.Symbol + "_long"
@@ -1223,7 +1365,7 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	}
 
 	// Get current price
-	marketData, err := market.GetWithExchange(decision.Symbol, at.exchange)
+	currentPrice, err := at.getMarketPriceForExecution(decision.Symbol)
 	if err != nil {
 		return err
 	}
@@ -1276,9 +1418,9 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	}
 
 	// Calculate quantity with adjusted position size
-	quantity := actualPositionSize / marketData.CurrentPrice
+	quantity := actualPositionSize / currentPrice
 	actionRecord.Quantity = quantity
-	actionRecord.Price = marketData.CurrentPrice
+	actionRecord.Price = currentPrice
 
 	// Set margin mode
 	if err := at.trader.SetMarginMode(decision.Symbol, at.config.IsCrossMargin); err != nil {
@@ -1300,7 +1442,7 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	logger.Infof("  ✓ Position opened successfully, order ID: %v, quantity: %.4f", order["orderId"], quantity)
 
 	// Record order to database and poll for confirmation
-	at.recordAndConfirmOrder(order, decision.Symbol, "open_short", quantity, marketData.CurrentPrice, decision.Leverage, 0)
+	at.recordAndConfirmOrder(order, decision.Symbol, "open_short", quantity, currentPrice, decision.Leverage, 0)
 
 	// Record position opening time
 	posKey := decision.Symbol + "_short"
@@ -1322,14 +1464,14 @@ func (at *AutoTrader) executeCloseLongWithRecord(decision *kernel.Decision, acti
 	logger.Infof("  🔄 Close long: %s", decision.Symbol)
 
 	// Get current price
-	marketData, err := market.GetWithExchange(decision.Symbol, at.exchange)
+	currentPrice, err := at.getMarketPriceForExecution(decision.Symbol)
 	if err != nil {
 		return err
 	}
-	actionRecord.Price = marketData.CurrentPrice
+	actionRecord.Price = currentPrice
 
 	// Normalize symbol for database lookup
-	normalizedSymbol := market.Normalize(decision.Symbol)
+	normalizedSymbol := market.NormalizeByExchange(at.exchange, decision.Symbol)
 
 	// Get entry price and quantity - prioritize local database for accurate quantity
 	var entryPrice float64
@@ -1375,7 +1517,7 @@ func (at *AutoTrader) executeCloseLongWithRecord(decision *kernel.Decision, acti
 	}
 
 	// Record order to database and poll for confirmation
-	at.recordAndConfirmOrder(order, decision.Symbol, "close_long", quantity, marketData.CurrentPrice, 0, entryPrice)
+	at.recordAndConfirmOrder(order, decision.Symbol, "close_long", quantity, currentPrice, 0, entryPrice)
 
 	logger.Infof("  ✓ Position closed successfully")
 	return nil
@@ -1386,14 +1528,14 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *kernel.Decision, act
 	logger.Infof("  🔄 Close short: %s", decision.Symbol)
 
 	// Get current price
-	marketData, err := market.GetWithExchange(decision.Symbol, at.exchange)
+	currentPrice, err := at.getMarketPriceForExecution(decision.Symbol)
 	if err != nil {
 		return err
 	}
-	actionRecord.Price = marketData.CurrentPrice
+	actionRecord.Price = currentPrice
 
 	// Normalize symbol for database lookup
-	normalizedSymbol := market.Normalize(decision.Symbol)
+	normalizedSymbol := market.NormalizeByExchange(at.exchange, decision.Symbol)
 
 	// Get entry price and quantity - prioritize local database for accurate quantity
 	var entryPrice float64
@@ -1439,7 +1581,7 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *kernel.Decision, act
 	}
 
 	// Record order to database and poll for confirmation
-	at.recordAndConfirmOrder(order, decision.Symbol, "close_short", quantity, marketData.CurrentPrice, 0, entryPrice)
+	at.recordAndConfirmOrder(order, decision.Symbol, "close_short", quantity, currentPrice, 0, entryPrice)
 
 	logger.Infof("  ✓ Position closed successfully")
 	return nil
@@ -2038,7 +2180,7 @@ func (at *AutoTrader) recordAndConfirmOrder(orderResult map[string]interface{}, 
 	}
 
 	// Normalize symbol for position record consistency
-	normalizedSymbolForPosition := market.Normalize(symbol)
+	normalizedSymbolForPosition := market.NormalizeByExchange(at.exchange, symbol)
 
 	logger.Infof("  📝 Recording position (ID: %s, action: %s, price: %.6f, qty: %.6f, fee: %.4f)",
 		orderID, action, actualPrice, actualQty, fee)
@@ -2130,7 +2272,7 @@ func (at *AutoTrader) createOrderRecord(orderID, symbol, action, positionSide st
 	reduceOnly := (action == "close_long" || action == "close_short")
 
 	// Normalize symbol for consistency
-	normalizedSymbol := market.Normalize(symbol)
+	normalizedSymbol := market.NormalizeByExchange(at.exchange, symbol)
 
 	return &store.TraderOrder{
 		TraderID:        at.id,
@@ -2148,7 +2290,7 @@ func (at *AutoTrader) createOrderRecord(orderID, symbol, action, positionSide st
 		FilledQuantity:  0,
 		AvgFillPrice:    0,
 		Commission:      0,
-		CommissionAsset: "USDT",
+		CommissionAsset: quoteCurrencyForExchange(at.exchange),
 		Leverage:        leverage,
 		ReduceOnly:      reduceOnly,
 		ClosePosition:   reduceOnly,
@@ -2177,25 +2319,25 @@ func (at *AutoTrader) recordOrderFill(orderRecordID int64, exchangeOrderID, symb
 	tradeID := fmt.Sprintf("%s-%d", exchangeOrderID, time.Now().UnixNano())
 
 	// Normalize symbol for consistency
-	normalizedSymbol := market.Normalize(symbol)
+	normalizedSymbol := market.NormalizeByExchange(at.exchange, symbol)
 
 	fill := &store.TraderFill{
-		TraderID:         at.id,
-		ExchangeID:       at.exchangeID,
-		ExchangeType:     at.exchange,
-		OrderID:          orderRecordID,
-		ExchangeOrderID:  exchangeOrderID,
-		ExchangeTradeID:  tradeID,
-		Symbol:           normalizedSymbol,
-		Side:             side,
-		Price:            price,
-		Quantity:         quantity,
-		QuoteQuantity:    price * quantity,
-		Commission:       fee,
-		CommissionAsset:  "USDT",
-		RealizedPnL:      0, // Will be calculated for close orders
-		IsMaker:          false, // Market orders are usually taker
-		CreatedAt:        time.Now().UTC().UnixMilli(),
+		TraderID:        at.id,
+		ExchangeID:      at.exchangeID,
+		ExchangeType:    at.exchange,
+		OrderID:         orderRecordID,
+		ExchangeOrderID: exchangeOrderID,
+		ExchangeTradeID: tradeID,
+		Symbol:          normalizedSymbol,
+		Side:            side,
+		Price:           price,
+		Quantity:        quantity,
+		QuoteQuantity:   price * quantity,
+		Commission:      fee,
+		CommissionAsset: quoteCurrencyForExchange(at.exchange),
+		RealizedPnL:     0,     // Will be calculated for close orders
+		IsMaker:         false, // Market orders are usually taker
+		CreatedAt:       time.Now().UTC().UnixMilli(),
 	}
 
 	// Calculate realized PnL for close orders
@@ -2227,6 +2369,13 @@ func (at *AutoTrader) recordOrderFill(orderRecordID int64, exchangeOrderID, symb
 // ============================================================================
 // Risk Control Helpers
 // ============================================================================
+
+func quoteCurrencyForExchange(exchange string) string {
+	if strings.EqualFold(exchange, "qmt") {
+		return "CNY"
+	}
+	return "USDT"
+}
 
 // isBTCETH checks if a symbol is BTC or ETH
 func isBTCETH(symbol string) bool {
@@ -2265,8 +2414,9 @@ func (at *AutoTrader) enforcePositionValueRatio(positionSizeUSD float64, equity 
 
 	// Check if position size exceeds limit
 	if positionSizeUSD > maxPositionValue {
-		logger.Infof("  ⚠️ [RISK CONTROL] Position %.2f USDT exceeds limit (equity %.2f × %.1fx = %.2f USDT max for %s), capping",
-			positionSizeUSD, equity, maxPositionValueRatio, maxPositionValue, symbol)
+		unit := quoteCurrencyForExchange(at.exchange)
+		logger.Infof("  ⚠️ [RISK CONTROL] Position %.2f %s exceeds limit (equity %.2f × %.1fx = %.2f %s max for %s), capping",
+			positionSizeUSD, unit, equity, maxPositionValueRatio, maxPositionValue, unit, symbol)
 		return maxPositionValue, true
 	}
 
@@ -2281,11 +2431,12 @@ func (at *AutoTrader) enforceMinPositionSize(positionSizeUSD float64) error {
 
 	minSize := at.config.StrategyConfig.RiskControl.MinPositionSize
 	if minSize <= 0 {
-		minSize = 12 // Default: 12 USDT
+		minSize = 12
 	}
 
 	if positionSizeUSD < minSize {
-		return fmt.Errorf("❌ [RISK CONTROL] Position %.2f USDT below minimum (%.2f USDT)", positionSizeUSD, minSize)
+		unit := quoteCurrencyForExchange(at.exchange)
+		return fmt.Errorf("❌ [RISK CONTROL] Position %.2f %s below minimum (%.2f %s)", positionSizeUSD, unit, minSize, unit)
 	}
 	return nil
 }
@@ -2323,4 +2474,3 @@ func getSideFromAction(action string) string {
 func (at *AutoTrader) GetOpenOrders(symbol string) ([]OpenOrder, error) {
 	return at.trader.GetOpenOrders(symbol)
 }
-

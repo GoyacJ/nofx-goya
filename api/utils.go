@@ -46,6 +46,10 @@ func SanitizeExchangeConfigForLog(exchanges map[string]struct {
 	AsterPrivateKey       string `json:"aster_private_key"`
 	LighterWalletAddr     string `json:"lighter_wallet_addr"`
 	LighterPrivateKey     string `json:"lighter_private_key"`
+	QMTGatewayURL         string `json:"qmt_gateway_url"`
+	QMTAccountID          string `json:"qmt_account_id"`
+	QMTGatewayToken       string `json:"qmt_gateway_token"`
+	QMTMarket             string `json:"qmt_market"`
 }) map[string]interface{} {
 	safe := make(map[string]interface{})
 	for exchangeID, cfg := range exchanges {
@@ -67,6 +71,9 @@ func SanitizeExchangeConfigForLog(exchanges map[string]struct {
 		if cfg.LighterPrivateKey != "" {
 			safeExchange["lighter_private_key"] = MaskSensitiveString(cfg.LighterPrivateKey)
 		}
+		if cfg.QMTGatewayToken != "" {
+			safeExchange["qmt_gateway_token"] = MaskSensitiveString(cfg.QMTGatewayToken)
+		}
 
 		// Add non-sensitive fields directly
 		if cfg.HyperliquidWalletAddr != "" {
@@ -80,6 +87,15 @@ func SanitizeExchangeConfigForLog(exchanges map[string]struct {
 		}
 		if cfg.LighterWalletAddr != "" {
 			safeExchange["lighter_wallet_addr"] = cfg.LighterWalletAddr
+		}
+		if cfg.QMTGatewayURL != "" {
+			safeExchange["qmt_gateway_url"] = cfg.QMTGatewayURL
+		}
+		if cfg.QMTAccountID != "" {
+			safeExchange["qmt_account_id"] = cfg.QMTAccountID
+		}
+		if cfg.QMTMarket != "" {
+			safeExchange["qmt_market"] = cfg.QMTMarket
 		}
 
 		safe[exchangeID] = safeExchange

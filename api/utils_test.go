@@ -99,14 +99,18 @@ func TestSanitizeExchangeConfigForLog(t *testing.T) {
 		AsterPrivateKey       string `json:"aster_private_key"`
 		LighterWalletAddr     string `json:"lighter_wallet_addr"`
 		LighterPrivateKey     string `json:"lighter_private_key"`
+		QMTGatewayURL         string `json:"qmt_gateway_url"`
+		QMTAccountID          string `json:"qmt_account_id"`
+		QMTGatewayToken       string `json:"qmt_gateway_token"`
+		QMTMarket             string `json:"qmt_market"`
 	}{
 		"binance": {
-			Enabled:   true,
-			APIKey:    "binance_api_key_1234567890abcdef",
-			SecretKey: "binance_secret_key_1234567890abcdef",
-			Testnet:   false,
-			LighterWalletAddr:   "",
-			LighterPrivateKey:   "",
+			Enabled:           true,
+			APIKey:            "binance_api_key_1234567890abcdef",
+			SecretKey:         "binance_secret_key_1234567890abcdef",
+			Testnet:           false,
+			LighterWalletAddr: "",
+			LighterPrivateKey: "",
 		},
 		"hyperliquid": {
 			Enabled:               true,

@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts'
 import { useLanguage } from '../contexts/LanguageContext'
 import { httpClient } from '../lib/httpClient'
+import { api } from '../lib/api'
 
 // 订单接口定义
 interface OrderMarker {
@@ -37,6 +38,7 @@ interface ChartWithOrdersProps {
   traderID?: string // 用于获取该trader的订单
   height?: number
   exchange?: string // 交易所类型：binance, bybit, okx, bitget, hyperliquid, aster, lighter
+  exchangeId?: string // 交易所账户ID（QMT行情需要）
 }
 
 export function ChartWithOrders({
@@ -45,6 +47,7 @@ export function ChartWithOrders({
   traderID,
   height = 500,
   exchange = 'binance', // 默认使用 binance
+  exchangeId,
 }: ChartWithOrdersProps) {
   const { language } = useLanguage()
   const chartContainerRef = useRef<HTMLDivElement>(null)
@@ -111,15 +114,12 @@ export function ChartWithOrders({
   const fetchKlineData = async (symbol: string, interval: string): Promise<KlineData[]> => {
     try {
       const limit = 2000 // 获取最近2000根K线 (更多历史数据)
-      const klineUrl = `/api/klines?symbol=${symbol}&interval=${interval}&limit=${limit}&exchange=${exchange}`
-
-      const result = await httpClient.get(klineUrl)
-
-      if (!result.success || !result.data) {
-        throw new Error('Failed to fetch kline data from our service')
+      if (exchange === 'qmt' && !exchangeId) {
+        throw new Error('QMT exchange account is required')
       }
-
-      const data = result.data
+      const data = exchange === 'qmt'
+        ? await api.getQMTKlines(exchangeId || '', symbol, interval, limit)
+        : await api.getKlines(symbol, interval, limit, exchange)
 
       // 转换后端数据格式到 lightweight-charts 格式
       // 后端返回的是 market.Kline 格式: {OpenTime, Open, High, Low, Close, Volume, ...}
@@ -424,7 +424,7 @@ export function ChartWithOrders({
     return () => {
       clearInterval(refreshInterval)
     }
-  }, [symbol, interval, traderID, language])
+  }, [symbol, interval, traderID, language, exchange, exchangeId])
 
   return (
     <div className="relative" style={{ background: '#0B0E11', borderRadius: '8px', overflow: 'hidden' }}>

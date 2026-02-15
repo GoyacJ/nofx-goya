@@ -118,10 +118,10 @@ export interface AIModel {
 
 export interface Exchange {
   id: string                     // UUID (empty for supported exchange templates)
-  exchange_type: string          // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter"
+  exchange_type: string          // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt"
   account_name: string           // User-defined account name
   name: string                   // Display name
-  type: 'cex' | 'dex'
+  type: 'cex' | 'dex' | 'stock'
   enabled: boolean
   apiKey?: string
   secretKey?: string
@@ -138,10 +138,14 @@ export interface Exchange {
   lighterPrivateKey?: string
   lighterApiKeyPrivateKey?: string
   lighterApiKeyIndex?: number
+  // QMT specific
+  qmtGatewayUrl?: string
+  qmtAccountId?: string
+  qmtMarket?: string
 }
 
 export interface CreateExchangeRequest {
-  exchange_type: string          // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter"
+  exchange_type: string          // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt"
   account_name: string           // User-defined account name
   enabled: boolean
   api_key?: string
@@ -156,6 +160,10 @@ export interface CreateExchangeRequest {
   lighter_private_key?: string
   lighter_api_key_private_key?: string
   lighter_api_key_index?: number
+  qmt_gateway_url?: string
+  qmt_account_id?: string
+  qmt_gateway_token?: string
+  qmt_market?: string
 }
 
 export interface CreateTraderRequest {
@@ -208,6 +216,10 @@ export interface UpdateExchangeConfigRequest {
       lighter_private_key?: string
       lighter_api_key_private_key?: string
       lighter_api_key_index?: number
+      qmt_gateway_url?: string
+      qmt_account_id?: string
+      qmt_gateway_token?: string
+      qmt_market?: string
     }
   }
 }

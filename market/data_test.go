@@ -583,3 +583,48 @@ func TestCalculateBoxData(t *testing.T) {
 		t.Errorf("Expected CurrentPrice = 100.0, got %v", box.CurrentPrice)
 	}
 }
+
+func TestNormalizeCN(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{input: "600519", expected: "600519.SH"},
+		{input: "000001", expected: "000001.SZ"},
+		{input: "600519.SH", expected: "600519.SH"},
+		{input: "000001.SZ", expected: "000001.SZ"},
+		{input: "SH600519", expected: "600519.SH"},
+		{input: "SZ000001", expected: "000001.SZ"},
+		{input: "600519SH", expected: "600519.SH"},
+		{input: "000001sz", expected: "000001.SZ"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := NormalizeCN(tt.input)
+			if got != tt.expected {
+				t.Fatalf("NormalizeCN(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNormalizeByExchange(t *testing.T) {
+	qmtCases := map[string]string{
+		"600519":    "600519.SH",
+		"000001":    "000001.SZ",
+		"SH600519":  "600519.SH",
+		"000001.SZ": "000001.SZ",
+	}
+	for input, expected := range qmtCases {
+		got := NormalizeByExchange("qmt", input)
+		if got != expected {
+			t.Fatalf("NormalizeByExchange(qmt, %q) = %q, want %q", input, got, expected)
+		}
+	}
+
+	// Non-QMT exchanges should keep existing crypto normalization behavior.
+	if got := NormalizeByExchange("binance", "btc"); got != "BTCUSDT" {
+		t.Fatalf("NormalizeByExchange(binance, btc) = %q, want BTCUSDT", got)
+	}
+}

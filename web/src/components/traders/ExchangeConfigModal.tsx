@@ -30,6 +30,7 @@ const SUPPORTED_EXCHANGE_TEMPLATES = [
   { exchange_type: 'hyperliquid', name: 'Hyperliquid', type: 'dex' as const },
   { exchange_type: 'aster', name: 'Aster DEX', type: 'dex' as const },
   { exchange_type: 'lighter', name: 'Lighter', type: 'dex' as const },
+  { exchange_type: 'qmt', name: 'QMT A-Shares', type: 'stock' as const },
 ]
 
 interface ExchangeConfigModalProps {
@@ -50,7 +51,11 @@ interface ExchangeConfigModalProps {
     lighterWalletAddr?: string,
     lighterPrivateKey?: string,
     lighterApiKeyPrivateKey?: string,
-    lighterApiKeyIndex?: number
+    lighterApiKeyIndex?: number,
+    qmtGatewayURL?: string,
+    qmtAccountID?: string,
+    qmtGatewayToken?: string,
+    qmtMarket?: string
   ) => Promise<void>
   onDelete: (exchangeId: string) => void
   onClose: () => void
@@ -132,8 +137,18 @@ function ExchangeCard({
       <span
         className="text-xs px-2 py-0.5 rounded-full"
         style={{
-          background: template.type === 'cex' ? 'rgba(240, 185, 11, 0.2)' : 'rgba(139, 92, 246, 0.2)',
-          color: template.type === 'cex' ? '#F0B90B' : '#A78BFA',
+          background:
+            template.type === 'cex'
+              ? 'rgba(240, 185, 11, 0.2)'
+              : template.type === 'dex'
+                ? 'rgba(139, 92, 246, 0.2)'
+                : 'rgba(34, 197, 94, 0.2)',
+          color:
+            template.type === 'cex'
+              ? '#F0B90B'
+              : template.type === 'dex'
+                ? '#A78BFA'
+                : '#22C55E',
         }}
       >
         {template.type.toUpperCase()}
@@ -177,8 +192,14 @@ export function ExchangeConfigModal({
   const [lighterApiKeyPrivateKey, setLighterApiKeyPrivateKey] = useState('')
   const [lighterApiKeyIndex, setLighterApiKeyIndex] = useState(0)
 
+  // QMT fields
+  const [qmtGatewayURL, setQMTGatewayURL] = useState('')
+  const [qmtAccountID, setQMTAccountID] = useState('')
+  const [qmtGatewayToken, setQMTGatewayToken] = useState('')
+  const [qmtMarket, setQMTMarket] = useState('CN-A')
+
   // Other state
-  const [secureInputTarget, setSecureInputTarget] = useState<null | 'hyperliquid' | 'aster' | 'lighter'>(null)
+  const [secureInputTarget, setSecureInputTarget] = useState<null | 'hyperliquid' | 'aster' | 'lighter' | 'qmt'>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [accountName, setAccountName] = useState('')
 
@@ -204,6 +225,7 @@ export function ExchangeConfigModal({
     hyperliquid: { url: 'https://app.hyperliquid.xyz/join/AITRADING', hasReferral: true },
     aster: { url: 'https://www.asterdex.com/en/referral/fdfc0e', hasReferral: true },
     lighter: { url: 'https://app.lighter.xyz/?referral=68151432', hasReferral: true },
+    qmt: { url: 'https://www.thinktrader.net/', hasReferral: false },
   }
 
   // Initialize form when editing
@@ -221,6 +243,10 @@ export function ExchangeConfigModal({
       setLighterWalletAddr(selectedExchange.lighterWalletAddr || '')
       setLighterApiKeyPrivateKey('')
       setLighterApiKeyIndex(selectedExchange.lighterApiKeyIndex || 0)
+      setQMTGatewayURL(selectedExchange.qmtGatewayUrl || '')
+      setQMTAccountID(selectedExchange.qmtAccountId || '')
+      setQMTGatewayToken('')
+      setQMTMarket(selectedExchange.qmtMarket || 'CN-A')
     }
   }, [editingExchangeId, selectedExchange])
 
@@ -273,6 +299,7 @@ export function ExchangeConfigModal({
       setLighterApiKeyPrivateKey(trimmed)
       toast.success(t('lighterApiKeyImported', language))
     }
+    if (secureInputTarget === 'qmt') setQMTGatewayToken(trimmed)
     setSecureInputTarget(null)
   }
 
@@ -327,6 +354,30 @@ export function ExchangeConfigModal({
       } else if (currentExchangeType === 'lighter') {
         if (!lighterWalletAddr.trim() || !lighterApiKeyPrivateKey.trim()) return
         await onSave(exchangeId, exchangeType, trimmedAccountName, '', '', '', testnet, undefined, undefined, undefined, undefined, lighterWalletAddr.trim(), '', lighterApiKeyPrivateKey.trim(), lighterApiKeyIndex)
+      } else if (currentExchangeType === 'qmt') {
+        if (!qmtGatewayURL.trim() || !qmtAccountID.trim()) return
+        if (!editingExchangeId && !qmtGatewayToken.trim()) return
+        await onSave(
+          exchangeId,
+          exchangeType,
+          trimmedAccountName,
+          '',
+          '',
+          '',
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          qmtGatewayURL.trim(),
+          qmtAccountID.trim(),
+          qmtGatewayToken.trim(),
+          qmtMarket.trim() || 'CN-A',
+        )
       } else {
         if (!apiKey.trim() || !secretKey.trim()) return
         await onSave(exchangeId, exchangeType, trimmedAccountName, apiKey.trim(), secretKey.trim(), '', testnet)
@@ -339,6 +390,7 @@ export function ExchangeConfigModal({
   const stepLabels = language === 'zh' ? ['选择交易所', '配置账户'] : ['Select Exchange', 'Configure']
   const cexExchanges = SUPPORTED_EXCHANGE_TEMPLATES.filter(t => t.type === 'cex')
   const dexExchanges = SUPPORTED_EXCHANGE_TEMPLATES.filter(t => t.type === 'dex')
+  const stockExchanges = SUPPORTED_EXCHANGE_TEMPLATES.filter(t => t.type === 'stock')
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto backdrop-blur-sm">
@@ -438,6 +490,24 @@ export function ExchangeConfigModal({
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
                     {dexExchanges.map((template) => (
+                      <ExchangeCard
+                        key={template.exchange_type}
+                        template={template}
+                        selected={selectedExchangeType === template.exchange_type}
+                        onClick={() => handleSelectExchange(template.exchange_type)}
+                        disabled={webCryptoStatus !== 'secure' && webCryptoStatus !== 'disabled'}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* STOCK */}
+                <div className="space-y-3">
+                  <div className="text-xs font-medium uppercase tracking-wide" style={{ color: '#22C55E' }}>
+                    {language === 'zh' ? '股票 (Stock)' : 'Stock Exchanges'}
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                    {stockExchanges.map((template) => (
                       <ExchangeCard
                         key={template.exchange_type}
                         template={template}
@@ -721,6 +791,90 @@ export function ExchangeConfigModal({
                       </Tooltip>
                     </label>
                     <input type="number" min={0} max={255} value={lighterApiKeyIndex} onChange={(e) => setLighterApiKeyIndex(parseInt(e.target.value) || 0)} className="w-full px-4 py-3 rounded-xl" style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }} />
+                  </div>
+                </>
+              )}
+
+              {/* QMT Fields */}
+              {currentExchangeType === 'qmt' && (
+                <>
+                  <div className="p-4 rounded-xl" style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                    <div className="flex items-start gap-2">
+                      <span style={{ fontSize: '16px' }}>📊</span>
+                      <div>
+                        <div className="text-sm font-semibold mb-1" style={{ color: '#22C55E' }}>
+                          {language === 'zh' ? 'QMT 网关配置' : 'QMT Gateway Setup'}
+                        </div>
+                        <div className="text-xs" style={{ color: '#848E9C' }}>
+                          {language === 'zh'
+                            ? '使用 Windows 机器运行 QMT Gateway，并填写网关地址、账户ID、鉴权Token。'
+                            : 'Run QMT Gateway on Windows and provide gateway URL, account ID, and token.'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                      {language === 'zh' ? 'Gateway URL' : 'Gateway URL'} *
+                    </label>
+                    <input
+                      type="text"
+                      value={qmtGatewayURL}
+                      onChange={(e) => setQMTGatewayURL(e.target.value)}
+                      placeholder="http://127.0.0.1:19090"
+                      className="w-full px-4 py-3 rounded-xl"
+                      style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                      {language === 'zh' ? '账户 ID' : 'Account ID'} *
+                    </label>
+                    <input
+                      type="text"
+                      value={qmtAccountID}
+                      onChange={(e) => setQMTAccountID(e.target.value)}
+                      placeholder={language === 'zh' ? '例如：sim-001' : 'e.g. sim-001'}
+                      className="w-full px-4 py-3 rounded-xl"
+                      style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                      {language === 'zh' ? 'Gateway Token' : 'Gateway Token'} *
+                      <button type="button" onClick={() => setSecureInputTarget('qmt')} className="text-xs underline" style={{ color: '#22C55E' }}>
+                        {t('secureInputButton', language)}
+                      </button>
+                    </label>
+                    <input
+                      type="password"
+                      value={qmtGatewayToken}
+                      onChange={(e) => setQMTGatewayToken(e.target.value)}
+                      placeholder={language === 'zh' ? '输入 QMT 网关 Token' : 'Enter gateway token'}
+                      className="w-full px-4 py-3 rounded-xl font-mono"
+                      style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                      required={!editingExchangeId}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                      {language === 'zh' ? '市场标识' : 'Market'} *
+                    </label>
+                    <input
+                      type="text"
+                      value={qmtMarket}
+                      onChange={(e) => setQMTMarket(e.target.value)}
+                      placeholder="CN-A"
+                      className="w-full px-4 py-3 rounded-xl"
+                      style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                      required
+                    />
                   </div>
                 </>
               )}

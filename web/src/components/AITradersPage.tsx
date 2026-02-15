@@ -717,7 +717,11 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     lighterWalletAddr?: string,
     lighterPrivateKey?: string,
     lighterApiKeyPrivateKey?: string,
-    lighterApiKeyIndex?: number
+    lighterApiKeyIndex?: number,
+    qmtGatewayURL?: string,
+    qmtAccountID?: string,
+    qmtGatewayToken?: string,
+    qmtMarket?: string
   ) => {
     try {
       if (exchangeId) {
@@ -744,6 +748,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               lighter_private_key: lighterPrivateKey || '',
               lighter_api_key_private_key: lighterApiKeyPrivateKey || '',
               lighter_api_key_index: lighterApiKeyIndex || 0,
+              qmt_gateway_url: qmtGatewayURL || '',
+              qmt_account_id: qmtAccountID || '',
+              qmt_gateway_token: qmtGatewayToken || '',
+              qmt_market: qmtMarket || 'CN-A',
             },
           },
         }
@@ -771,6 +779,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           lighter_private_key: lighterPrivateKey || '',
           lighter_api_key_private_key: lighterApiKeyPrivateKey || '',
           lighter_api_key_index: lighterApiKeyIndex || 0,
+          qmt_gateway_url: qmtGatewayURL || '',
+          qmt_account_id: qmtAccountID || '',
+          qmt_gateway_token: qmtGatewayToken || '',
+          qmt_market: qmtMarket || 'CN-A',
         }
 
         await toast.promise(api.createExchangeEncrypted(createRequest), {

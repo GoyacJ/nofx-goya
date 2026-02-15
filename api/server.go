@@ -29,6 +29,7 @@ import (
 	"nofx/trader/kucoin"
 	"nofx/trader/lighter"
 	"nofx/trader/okx"
+	qmttrader "nofx/trader/qmt"
 	"strconv"
 	"strings"
 	"time"
@@ -216,6 +217,8 @@ func (s *Server) setupRoutes() {
 			protected.GET("/decisions", s.handleDecisions)
 			protected.GET("/decisions/latest", s.handleLatestDecisions)
 			protected.GET("/statistics", s.handleStatistics)
+			protected.GET("/qmt/klines", s.handleQMTKlines)
+			protected.GET("/qmt/symbols", s.handleQMTSymbols)
 
 			// Backtest routes
 			backtest := protected.Group("/backtest")
@@ -445,7 +448,7 @@ type SafeModelConfig struct {
 type ExchangeConfig struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	Type      string `json:"type"` // "cex" or "dex"
+	Type      string `json:"type"` // "cex" or "dex" or "stock"
 	Enabled   bool   `json:"enabled"`
 	APIKey    string `json:"apiKey,omitempty"`
 	SecretKey string `json:"secretKey,omitempty"`
@@ -455,16 +458,19 @@ type ExchangeConfig struct {
 // SafeExchangeConfig Safe exchange configuration structure (does not contain sensitive information)
 type SafeExchangeConfig struct {
 	ID                    string `json:"id"`            // UUID
-	ExchangeType          string `json:"exchange_type"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter"
+	ExchangeType          string `json:"exchange_type"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt"
 	AccountName           string `json:"account_name"`  // User-defined account name
 	Name                  string `json:"name"`          // Display name
-	Type                  string `json:"type"`          // "cex" or "dex"
+	Type                  string `json:"type"`          // "cex" or "dex" or "stock"
 	Enabled               bool   `json:"enabled"`
 	Testnet               bool   `json:"testnet,omitempty"`
 	HyperliquidWalletAddr string `json:"hyperliquidWalletAddr"` // Hyperliquid wallet address (not sensitive)
 	AsterUser             string `json:"asterUser"`             // Aster username (not sensitive)
 	AsterSigner           string `json:"asterSigner"`           // Aster signer (not sensitive)
 	LighterWalletAddr     string `json:"lighterWalletAddr"`     // LIGHTER wallet address (not sensitive)
+	QMTGatewayURL         string `json:"qmtGatewayUrl"`         // QMT gateway URL (not sensitive)
+	QMTAccountID          string `json:"qmtAccountId"`          // QMT account ID (not sensitive)
+	QMTMarket             string `json:"qmtMarket"`             // QMT market, default CN-A (not sensitive)
 }
 
 type UpdateModelConfigRequest struct {
@@ -491,6 +497,10 @@ type UpdateExchangeConfigRequest struct {
 		LighterPrivateKey       string `json:"lighter_private_key"`
 		LighterAPIKeyPrivateKey string `json:"lighter_api_key_private_key"`
 		LighterAPIKeyIndex      int    `json:"lighter_api_key_index"`
+		QMTGatewayURL           string `json:"qmt_gateway_url"`
+		QMTAccountID            string `json:"qmt_account_id"`
+		QMTGatewayToken         string `json:"qmt_gateway_token"`
+		QMTMarket               string `json:"qmt_market"`
 	} `json:"exchanges"`
 }
 
@@ -513,16 +523,9 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		return
 	}
 
-	// Validate trading symbol format
-	if req.TradingSymbols != "" {
-		symbols := strings.Split(req.TradingSymbols, ",")
-		for _, symbol := range symbols {
-			symbol = strings.TrimSpace(symbol)
-			if symbol != "" && !strings.HasSuffix(strings.ToUpper(symbol), "USDT") {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid symbol format: %s, must end with USDT", symbol)})
-				return
-			}
-		}
+	if err := s.validateExchangeStrategyCompatibility(userID, req.ExchangeID, req.StrategyID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	// Generate trader ID (use short UUID prefix for readability)
@@ -587,70 +590,7 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		logger.Infof("⚠️ Exchange %s not enabled, using user input for initial balance", req.ExchangeID)
 	} else {
 		// Create temporary trader based on exchange type to query balance
-		var tempTrader trader.Trader
-		var createErr error
-
-		// Use ExchangeType (e.g., "binance") instead of ID (UUID)
-		// Convert EncryptedString fields to string
-		switch exchangeCfg.ExchangeType {
-		case "binance":
-			tempTrader = binance.NewFuturesTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID)
-		case "hyperliquid":
-			tempTrader, createErr = hyperliquidtrader.NewHyperliquidTrader(
-				string(exchangeCfg.APIKey), // private key
-				exchangeCfg.HyperliquidWalletAddr,
-				exchangeCfg.Testnet,
-			)
-		case "aster":
-			tempTrader, createErr = aster.NewAsterTrader(
-				exchangeCfg.AsterUser,
-				exchangeCfg.AsterSigner,
-				string(exchangeCfg.AsterPrivateKey),
-			)
-		case "bybit":
-			tempTrader = bybit.NewBybitTrader(
-				string(exchangeCfg.APIKey),
-				string(exchangeCfg.SecretKey),
-			)
-		case "okx":
-			tempTrader = okx.NewOKXTrader(
-				string(exchangeCfg.APIKey),
-				string(exchangeCfg.SecretKey),
-				string(exchangeCfg.Passphrase),
-			)
-		case "bitget":
-			tempTrader = bitget.NewBitgetTrader(
-				string(exchangeCfg.APIKey),
-				string(exchangeCfg.SecretKey),
-				string(exchangeCfg.Passphrase),
-			)
-		case "gate":
-			tempTrader = gate.NewGateTrader(
-				string(exchangeCfg.APIKey),
-				string(exchangeCfg.SecretKey),
-			)
-		case "kucoin":
-			tempTrader = kucoin.NewKuCoinTrader(
-				string(exchangeCfg.APIKey),
-				string(exchangeCfg.SecretKey),
-				string(exchangeCfg.Passphrase),
-			)
-		case "lighter":
-			if exchangeCfg.LighterWalletAddr != "" && string(exchangeCfg.LighterAPIKeyPrivateKey) != "" {
-				// Lighter only supports mainnet
-				tempTrader, createErr = lighter.NewLighterTraderV2(
-					exchangeCfg.LighterWalletAddr,
-					string(exchangeCfg.LighterAPIKeyPrivateKey),
-					exchangeCfg.LighterAPIKeyIndex,
-					false, // Always use mainnet for Lighter
-				)
-			} else {
-				createErr = fmt.Errorf("Lighter requires wallet address and API Key private key")
-			}
-		default:
-			logger.Infof("⚠️ Unsupported exchange type: %s, using user input for initial balance", exchangeCfg.ExchangeType)
-		}
-
+		tempTrader, createErr := s.buildTempTraderFromExchange(exchangeCfg, userID)
 		if createErr != nil {
 			logger.Infof("⚠️ Failed to create temporary trader, using user input for initial balance: %v", createErr)
 		} else if tempTrader != nil {
@@ -666,7 +606,8 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 				for _, key := range balanceKeys {
 					if balance, ok := balanceInfo[key].(float64); ok && balance > 0 {
 						actualBalance = balance
-						logger.Infof("✓ Queried exchange total equity (%s): %.2f USDT (user input: %.2f USDT)", key, actualBalance, req.InitialBalance)
+						currency := quoteCurrencyForExchange(exchangeCfg.ExchangeType)
+						logger.Infof("✓ Queried exchange total equity (%s): %.2f %s (user input: %.2f %s)", key, actualBalance, currency, req.InitialBalance, currency)
 						break
 					}
 				}
@@ -821,6 +762,10 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 	strategyID := req.StrategyID
 	if strategyID == "" {
 		strategyID = existingTrader.StrategyID
+	}
+	if err := s.validateExchangeStrategyCompatibility(userID, req.ExchangeID, strategyID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
 	// Update trader configuration
@@ -1156,70 +1101,7 @@ func (s *Server) handleSyncBalance(c *gin.Context) {
 	}
 
 	// Create temporary trader to query balance
-	var tempTrader trader.Trader
-	var createErr error
-
-	// Use ExchangeType (e.g., "binance") instead of ExchangeID (which is now UUID)
-	// Convert EncryptedString fields to string
-	switch exchangeCfg.ExchangeType {
-	case "binance":
-		tempTrader = binance.NewFuturesTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID)
-	case "hyperliquid":
-		tempTrader, createErr = hyperliquidtrader.NewHyperliquidTrader(
-			string(exchangeCfg.APIKey),
-			exchangeCfg.HyperliquidWalletAddr,
-			exchangeCfg.Testnet,
-		)
-	case "aster":
-		tempTrader, createErr = aster.NewAsterTrader(
-			exchangeCfg.AsterUser,
-			exchangeCfg.AsterSigner,
-			string(exchangeCfg.AsterPrivateKey),
-		)
-	case "bybit":
-		tempTrader = bybit.NewBybitTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-		)
-	case "okx":
-		tempTrader = okx.NewOKXTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-			string(exchangeCfg.Passphrase),
-		)
-	case "bitget":
-		tempTrader = bitget.NewBitgetTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-			string(exchangeCfg.Passphrase),
-		)
-	case "gate":
-		tempTrader = gate.NewGateTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-		)
-	case "kucoin":
-		tempTrader = kucoin.NewKuCoinTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-			string(exchangeCfg.Passphrase),
-		)
-	case "lighter":
-		if exchangeCfg.LighterWalletAddr != "" && string(exchangeCfg.LighterAPIKeyPrivateKey) != "" {
-			// Lighter only supports mainnet
-			tempTrader, createErr = lighter.NewLighterTraderV2(
-				exchangeCfg.LighterWalletAddr,
-				string(exchangeCfg.LighterAPIKeyPrivateKey),
-				exchangeCfg.LighterAPIKeyIndex,
-				false, // Always use mainnet for Lighter
-			)
-		} else {
-			createErr = fmt.Errorf("Lighter requires wallet address and API Key private key")
-		}
-	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported exchange type"})
-		return
-	}
+	tempTrader, createErr := s.buildTempTraderFromExchange(exchangeCfg, userID)
 
 	if createErr != nil {
 		logger.Infof("⚠️ Failed to create temporary trader: %v", createErr)
@@ -1258,9 +1140,10 @@ func (s *Server) handleSyncBalance(c *gin.Context) {
 	if changePercent < 0 {
 		changeType = "decrease"
 	}
+	currency := quoteCurrencyForExchange(exchangeCfg.ExchangeType)
 
-	logger.Infof("✓ Queried actual exchange balance: %.2f USDT (current config: %.2f USDT, change: %.2f%%)",
-		actualBalance, oldBalance, changePercent)
+	logger.Infof("✓ Queried actual exchange balance: %.2f %s (current config: %.2f %s, change: %.2f%%)",
+		actualBalance, currency, oldBalance, currency, changePercent)
 
 	// Update initial_balance in database
 	err = s.store.Trader().UpdateInitialBalance(userID, traderID, actualBalance)
@@ -1276,7 +1159,7 @@ func (s *Server) handleSyncBalance(c *gin.Context) {
 		logger.Infof("⚠️ Failed to reload user traders into memory: %v", err)
 	}
 
-	logger.Infof("✅ Synced balance: %.2f → %.2f USDT (%s %.2f%%)", oldBalance, actualBalance, changeType, changePercent)
+	logger.Infof("✅ Synced balance: %.2f → %.2f %s (%s %.2f%%)", oldBalance, actualBalance, currency, changeType, changePercent)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Balance synced successfully",
@@ -1317,72 +1200,14 @@ func (s *Server) handleClosePosition(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Exchange not configured or not enabled"})
 		return
 	}
-
-	// Create temporary trader to execute close position
-	var tempTrader trader.Trader
-	var createErr error
-
-	// Use ExchangeType (e.g., "binance") instead of ExchangeID (which is now UUID)
-	// Convert EncryptedString fields to string
-	switch exchangeCfg.ExchangeType {
-	case "binance":
-		tempTrader = binance.NewFuturesTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID)
-	case "hyperliquid":
-		tempTrader, createErr = hyperliquidtrader.NewHyperliquidTrader(
-			string(exchangeCfg.APIKey),
-			exchangeCfg.HyperliquidWalletAddr,
-			exchangeCfg.Testnet,
-		)
-	case "aster":
-		tempTrader, createErr = aster.NewAsterTrader(
-			exchangeCfg.AsterUser,
-			exchangeCfg.AsterSigner,
-			string(exchangeCfg.AsterPrivateKey),
-		)
-	case "bybit":
-		tempTrader = bybit.NewBybitTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-		)
-	case "okx":
-		tempTrader = okx.NewOKXTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-			string(exchangeCfg.Passphrase),
-		)
-	case "bitget":
-		tempTrader = bitget.NewBitgetTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-			string(exchangeCfg.Passphrase),
-		)
-	case "gate":
-		tempTrader = gate.NewGateTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-		)
-	case "kucoin":
-		tempTrader = kucoin.NewKuCoinTrader(
-			string(exchangeCfg.APIKey),
-			string(exchangeCfg.SecretKey),
-			string(exchangeCfg.Passphrase),
-		)
-	case "lighter":
-		if exchangeCfg.LighterWalletAddr != "" && string(exchangeCfg.LighterAPIKeyPrivateKey) != "" {
-			// Lighter only supports mainnet
-			tempTrader, createErr = lighter.NewLighterTraderV2(
-				exchangeCfg.LighterWalletAddr,
-				string(exchangeCfg.LighterAPIKeyPrivateKey),
-				exchangeCfg.LighterAPIKeyIndex,
-				false, // Always use mainnet for Lighter
-			)
-		} else {
-			createErr = fmt.Errorf("Lighter requires wallet address and API Key private key")
-		}
-	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported exchange type"})
+	if strings.EqualFold(exchangeCfg.ExchangeType, "qmt") && strings.EqualFold(req.Side, "SHORT") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "QMT cash account does not support short positions"})
 		return
 	}
+	normalizedSymbol := market.NormalizeByExchange(exchangeCfg.ExchangeType, req.Symbol)
+
+	// Create temporary trader to execute close position
+	tempTrader, createErr := s.buildTempTraderFromExchange(exchangeCfg, userID)
 
 	if createErr != nil {
 		logger.Infof("⚠️ Failed to create temporary trader: %v", createErr)
@@ -1399,7 +1224,7 @@ func (s *Server) handleClosePosition(c *gin.Context) {
 	var posQty float64
 	var entryPrice float64
 	for _, pos := range positions {
-		if pos["symbol"] == req.Symbol && pos["side"] == strings.ToLower(req.Side) {
+		if pos["symbol"] == normalizedSymbol && pos["side"] == strings.ToLower(req.Side) {
 			if amt, ok := pos["positionAmt"].(float64); ok {
 				posQty = amt
 				if posQty < 0 {
@@ -1418,9 +1243,9 @@ func (s *Server) handleClosePosition(c *gin.Context) {
 	var closeErr error
 
 	if req.Side == "LONG" {
-		result, closeErr = tempTrader.CloseLong(req.Symbol, 0) // 0 means close all
+		result, closeErr = tempTrader.CloseLong(normalizedSymbol, 0) // 0 means close all
 	} else if req.Side == "SHORT" {
-		result, closeErr = tempTrader.CloseShort(req.Symbol, 0) // 0 means close all
+		result, closeErr = tempTrader.CloseShort(normalizedSymbol, 0) // 0 means close all
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "side must be LONG or SHORT"})
 		return
@@ -1432,14 +1257,14 @@ func (s *Server) handleClosePosition(c *gin.Context) {
 		return
 	}
 
-	logger.Infof("✅ Position closed successfully: symbol=%s, side=%s, qty=%.6f, result=%v", req.Symbol, req.Side, posQty, result)
+	logger.Infof("✅ Position closed successfully: symbol=%s, side=%s, qty=%.6f, result=%v", normalizedSymbol, req.Side, posQty, result)
 
 	// Record order to database (for chart markers and history)
-	s.recordClosePositionOrder(traderID, exchangeCfg.ID, exchangeCfg.ExchangeType, req.Symbol, req.Side, posQty, entryPrice, result)
+	s.recordClosePositionOrder(traderID, exchangeCfg.ID, exchangeCfg.ExchangeType, normalizedSymbol, req.Side, posQty, entryPrice, result)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Position closed successfully",
-		"symbol":  req.Symbol,
+		"symbol":  normalizedSymbol,
 		"side":    req.Side,
 		"result":  result,
 	})
@@ -1539,7 +1364,7 @@ func (s *Server) recordClosePositionOrder(traderID, exchangeID, exchangeType, sy
 		Quantity:        quantity,
 		QuoteQuantity:   exitPrice * quantity,
 		Commission:      fee,
-		CommissionAsset: "USDT",
+		CommissionAsset: commissionAssetForExchange(exchangeType),
 		RealizedPnL:     0,
 		IsMaker:         false,
 		CreatedAt:       time.Now().UTC().UnixMilli(),
@@ -1614,7 +1439,7 @@ func (s *Server) pollAndUpdateOrderStatus(orderRecordID int64, traderID, exchang
 					Quantity:        actualQty,
 					QuoteQuantity:   actualPrice * actualQty,
 					Commission:      fee,
-					CommissionAsset: "USDT",
+					CommissionAsset: commissionAssetForExchange(exchangeType),
 					RealizedPnL:     0,
 					IsMaker:         false,
 					CreatedAt:       time.Now().UTC().UnixMilli(),
@@ -1657,6 +1482,119 @@ func getSideFromAction(action string) string {
 	default:
 		return "BUY"
 	}
+}
+
+func commissionAssetForExchange(exchangeType string) string {
+	if strings.EqualFold(exchangeType, "qmt") {
+		return "CNY"
+	}
+	return "USDT"
+}
+
+func quoteCurrencyForExchange(exchangeType string) string {
+	return commissionAssetForExchange(exchangeType)
+}
+
+func (s *Server) buildTempTraderFromExchange(exchangeCfg *store.Exchange, userID string) (trader.Trader, error) {
+	if exchangeCfg == nil {
+		return nil, fmt.Errorf("exchange config is nil")
+	}
+
+	switch exchangeCfg.ExchangeType {
+	case "binance":
+		return binance.NewFuturesTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID), nil
+	case "hyperliquid":
+		return hyperliquidtrader.NewHyperliquidTrader(
+			string(exchangeCfg.APIKey),
+			exchangeCfg.HyperliquidWalletAddr,
+			exchangeCfg.Testnet,
+		)
+	case "aster":
+		return aster.NewAsterTrader(
+			exchangeCfg.AsterUser,
+			exchangeCfg.AsterSigner,
+			string(exchangeCfg.AsterPrivateKey),
+		)
+	case "bybit":
+		return bybit.NewBybitTrader(
+			string(exchangeCfg.APIKey),
+			string(exchangeCfg.SecretKey),
+		), nil
+	case "okx":
+		return okx.NewOKXTrader(
+			string(exchangeCfg.APIKey),
+			string(exchangeCfg.SecretKey),
+			string(exchangeCfg.Passphrase),
+		), nil
+	case "bitget":
+		return bitget.NewBitgetTrader(
+			string(exchangeCfg.APIKey),
+			string(exchangeCfg.SecretKey),
+			string(exchangeCfg.Passphrase),
+		), nil
+	case "gate":
+		return gate.NewGateTrader(
+			string(exchangeCfg.APIKey),
+			string(exchangeCfg.SecretKey),
+		), nil
+	case "kucoin":
+		return kucoin.NewKuCoinTrader(
+			string(exchangeCfg.APIKey),
+			string(exchangeCfg.SecretKey),
+			string(exchangeCfg.Passphrase),
+		), nil
+	case "lighter":
+		if exchangeCfg.LighterWalletAddr == "" || string(exchangeCfg.LighterAPIKeyPrivateKey) == "" {
+			return nil, fmt.Errorf("Lighter requires wallet address and API Key private key")
+		}
+		return lighter.NewLighterTraderV2(
+			exchangeCfg.LighterWalletAddr,
+			string(exchangeCfg.LighterAPIKeyPrivateKey),
+			exchangeCfg.LighterAPIKeyIndex,
+			false, // Always use mainnet for Lighter
+		)
+	case "qmt":
+		if exchangeCfg.QMTGatewayURL == "" || exchangeCfg.QMTAccountID == "" || string(exchangeCfg.QMTGatewayToken) == "" {
+			return nil, fmt.Errorf("QMT requires gateway_url, account_id and gateway_token")
+		}
+		marketName := exchangeCfg.QMTMarket
+		if marketName == "" {
+			marketName = "CN-A"
+		}
+		return qmttrader.NewQMTTrader(exchangeCfg.QMTGatewayURL, exchangeCfg.QMTAccountID, string(exchangeCfg.QMTGatewayToken), marketName)
+	default:
+		return nil, fmt.Errorf("unsupported exchange type: %s", exchangeCfg.ExchangeType)
+	}
+}
+
+func (s *Server) validateExchangeStrategyCompatibility(userID, exchangeID, strategyID string) error {
+	if exchangeID == "" || strategyID == "" {
+		return nil
+	}
+
+	exchangeCfg, err := s.store.Exchange().GetByID(userID, exchangeID)
+	if err != nil {
+		return fmt.Errorf("failed to load exchange config: %w", err)
+	}
+	if exchangeCfg.ExchangeType != "qmt" {
+		return nil
+	}
+
+	strategy, err := s.store.Strategy().Get(userID, strategyID)
+	if err != nil {
+		return fmt.Errorf("failed to load strategy config: %w", err)
+	}
+	cfg, err := strategy.ParseConfig()
+	if err != nil {
+		return fmt.Errorf("failed to parse strategy config: %w", err)
+	}
+	if cfg.CoinSource.SourceType != "static" {
+		return fmt.Errorf("qmt only supports coin_source.source_type=static")
+	}
+	if cfg.CoinSource.UseAI500 || cfg.CoinSource.UseOITop || cfg.CoinSource.UseOILow {
+		return fmt.Errorf("qmt does not support ai500/oi_top/oi_low sources")
+	}
+	return nil
 }
 
 // handleGetModelConfigs Get AI model configurations
@@ -1831,6 +1769,9 @@ func (s *Server) handleGetExchangeConfigs(c *gin.Context) {
 			AsterUser:             exchange.AsterUser,
 			AsterSigner:           exchange.AsterSigner,
 			LighterWalletAddr:     exchange.LighterWalletAddr,
+			QMTGatewayURL:         exchange.QMTGatewayURL,
+			QMTAccountID:          exchange.QMTAccountID,
+			QMTMarket:             exchange.QMTMarket,
 		}
 	}
 
@@ -1906,7 +1847,12 @@ func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
 			tradersToReload[t.ID] = true
 		}
 
-		err := s.store.Exchange().Update(userID, exchangeID, exchangeData.Enabled, exchangeData.APIKey, exchangeData.SecretKey, exchangeData.Passphrase, exchangeData.Testnet, exchangeData.HyperliquidWalletAddr, exchangeData.AsterUser, exchangeData.AsterSigner, exchangeData.AsterPrivateKey, exchangeData.LighterWalletAddr, exchangeData.LighterPrivateKey, exchangeData.LighterAPIKeyPrivateKey, exchangeData.LighterAPIKeyIndex)
+		err := s.store.Exchange().Update(
+			userID, exchangeID, exchangeData.Enabled, exchangeData.APIKey, exchangeData.SecretKey, exchangeData.Passphrase, exchangeData.Testnet,
+			exchangeData.HyperliquidWalletAddr, exchangeData.AsterUser, exchangeData.AsterSigner, exchangeData.AsterPrivateKey,
+			exchangeData.LighterWalletAddr, exchangeData.LighterPrivateKey, exchangeData.LighterAPIKeyPrivateKey, exchangeData.LighterAPIKeyIndex,
+			exchangeData.QMTGatewayURL, exchangeData.QMTAccountID, exchangeData.QMTGatewayToken, exchangeData.QMTMarket,
+		)
 		if err != nil {
 			SafeInternalError(c, fmt.Sprintf("Update exchange %s", exchangeID), err)
 			return
@@ -1932,7 +1878,7 @@ func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
 
 // CreateExchangeRequest request structure for creating a new exchange account
 type CreateExchangeRequest struct {
-	ExchangeType            string `json:"exchange_type" binding:"required"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter"
+	ExchangeType            string `json:"exchange_type" binding:"required"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt"
 	AccountName             string `json:"account_name"`                     // User-defined account name
 	Enabled                 bool   `json:"enabled"`
 	APIKey                  string `json:"api_key"`
@@ -1947,6 +1893,10 @@ type CreateExchangeRequest struct {
 	LighterPrivateKey       string `json:"lighter_private_key"`
 	LighterAPIKeyPrivateKey string `json:"lighter_api_key_private_key"`
 	LighterAPIKeyIndex      int    `json:"lighter_api_key_index"`
+	QMTGatewayURL           string `json:"qmt_gateway_url"`
+	QMTAccountID            string `json:"qmt_account_id"`
+	QMTGatewayToken         string `json:"qmt_gateway_token"`
+	QMTMarket               string `json:"qmt_market"`
 }
 
 // handleCreateExchange Create a new exchange account
@@ -2003,7 +1953,7 @@ func (s *Server) handleCreateExchange(c *gin.Context) {
 	// Validate exchange type
 	validTypes := map[string]bool{
 		"binance": true, "bybit": true, "okx": true, "bitget": true,
-		"hyperliquid": true, "aster": true, "lighter": true, "gate": true, "kucoin": true,
+		"hyperliquid": true, "aster": true, "lighter": true, "gate": true, "kucoin": true, "qmt": true,
 	}
 	if !validTypes[req.ExchangeType] {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid exchange type: %s", req.ExchangeType)})
@@ -2016,6 +1966,7 @@ func (s *Server) handleCreateExchange(c *gin.Context) {
 		req.APIKey, req.SecretKey, req.Passphrase, req.Testnet,
 		req.HyperliquidWalletAddr, req.AsterUser, req.AsterSigner, req.AsterPrivateKey,
 		req.LighterWalletAddr, req.LighterPrivateKey, req.LighterAPIKeyPrivateKey, req.LighterAPIKeyIndex,
+		req.QMTGatewayURL, req.QMTAccountID, req.QMTGatewayToken, req.QMTMarket,
 	)
 	if err != nil {
 		logger.Infof("❌ Failed to create exchange account: %v", err)
@@ -2312,9 +2263,9 @@ func (s *Server) handleTrades(c *gin.Context) {
 		limit = l
 	}
 
-	// Normalize symbol (add USDT suffix if not present)
+	// Normalize symbol based on trader exchange
 	if symbol != "" {
-		symbol = market.Normalize(symbol)
+		symbol = market.NormalizeByExchange(trader.GetExchange(), symbol)
 	}
 
 	// Get trades from store
@@ -2368,9 +2319,9 @@ func (s *Server) handleOrders(c *gin.Context) {
 		limit = l
 	}
 
-	// Normalize symbol (add USDT suffix if not present)
+	// Normalize symbol based on trader exchange
 	if symbol != "" {
-		symbol = market.Normalize(symbol)
+		symbol = market.NormalizeByExchange(trader.GetExchange(), symbol)
 	}
 
 	// Get orders from store
@@ -2448,8 +2399,8 @@ func (s *Server) handleOpenOrders(c *gin.Context) {
 		return
 	}
 
-	// Normalize symbol
-	symbol = market.Normalize(symbol)
+	// Normalize symbol based on trader exchange
+	symbol = market.NormalizeByExchange(trader.GetExchange(), symbol)
 
 	// Get open orders from exchange
 	openOrders, err := trader.GetOpenOrders(symbol)
@@ -2488,6 +2439,9 @@ func (s *Server) handleKlines(c *gin.Context) {
 
 	// Route to appropriate data source based on exchange type
 	switch exchangeLower {
+	case "qmt":
+		c.JSON(http.StatusBadRequest, gin.H{"error": "QMT market data requires authenticated endpoint /api/qmt/klines"})
+		return
 	case "alpaca":
 		// US Stocks via Alpaca
 		klines, err = s.getKlinesFromAlpaca(symbol, interval, limit)
@@ -2511,7 +2465,7 @@ func (s *Server) handleKlines(c *gin.Context) {
 		}
 	default:
 		// Crypto exchanges via CoinAnk
-		symbol = market.Normalize(symbol)
+		symbol = market.NormalizeByExchange(exchangeLower, symbol)
 		klines, err = s.getKlinesFromCoinank(symbol, interval, exchange, limit)
 		if err != nil {
 			SafeInternalError(c, "Get klines from CoinAnk", err)
@@ -2762,6 +2716,108 @@ func (s *Server) getKlinesFromHyperliquid(symbol, interval string, limit int) ([
 	return klines, nil
 }
 
+func (s *Server) getQMTExchange(userID, exchangeID string) (*store.Exchange, error) {
+	if exchangeID == "" {
+		return nil, fmt.Errorf("exchange_id is required")
+	}
+
+	exchangeCfg, err := s.store.Exchange().GetByID(userID, exchangeID)
+	if err != nil {
+		return nil, err
+	}
+	if exchangeCfg.ExchangeType != "qmt" {
+		return nil, fmt.Errorf("exchange %s is not qmt", exchangeID)
+	}
+	if !exchangeCfg.Enabled {
+		return nil, fmt.Errorf("exchange is disabled")
+	}
+	return exchangeCfg, nil
+}
+
+func (s *Server) handleQMTKlines(c *gin.Context) {
+	userID := c.GetString("user_id")
+	exchangeID := c.Query("exchange_id")
+	symbol := c.Query("symbol")
+	if symbol == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "symbol parameter is required"})
+		return
+	}
+
+	interval := c.DefaultQuery("interval", "5m")
+	limitStr := c.DefaultQuery("limit", "500")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 500
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+
+	exchangeCfg, err := s.getQMTExchange(userID, exchangeID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tempTrader, err := s.buildTempTraderFromExchange(exchangeCfg, userID)
+	if err != nil {
+		SafeInternalError(c, "Failed to initialize qmt trader", err)
+		return
+	}
+
+	qmtTrader, ok := tempTrader.(*qmttrader.QMTTrader)
+	if !ok {
+		SafeInternalError(c, "QMT trader type assertion failed", fmt.Errorf("unexpected trader type"))
+		return
+	}
+
+	normalizedSymbol := market.NormalizeByExchange("qmt", symbol)
+	klines, err := qmtTrader.GetKlines(normalizedSymbol, interval, limit)
+	if err != nil {
+		SafeInternalError(c, "Get klines from QMT gateway", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, klines)
+}
+
+func (s *Server) handleQMTSymbols(c *gin.Context) {
+	userID := c.GetString("user_id")
+	exchangeID := c.Query("exchange_id")
+	scope := c.DefaultQuery("scope", "watchlist")
+	sector := c.Query("sector")
+
+	exchangeCfg, err := s.getQMTExchange(userID, exchangeID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	tempTrader, err := s.buildTempTraderFromExchange(exchangeCfg, userID)
+	if err != nil {
+		SafeInternalError(c, "Failed to initialize qmt trader", err)
+		return
+	}
+
+	qmtTrader, ok := tempTrader.(*qmttrader.QMTTrader)
+	if !ok {
+		SafeInternalError(c, "QMT trader type assertion failed", fmt.Errorf("unexpected trader type"))
+		return
+	}
+
+	symbols, err := qmtTrader.GetSymbols(scope, sector)
+	if err != nil {
+		SafeInternalError(c, "Get symbols from QMT gateway", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"exchange": "qmt",
+		"symbols":  symbols,
+		"count":    len(symbols),
+	})
+}
+
 // handleSymbols returns available symbols for a given exchange
 func (s *Server) handleSymbols(c *gin.Context) {
 	exchange := c.DefaultQuery("exchange", "hyperliquid")
@@ -2776,6 +2832,9 @@ func (s *Server) handleSymbols(c *gin.Context) {
 	var symbols []SymbolInfo
 
 	switch strings.ToLower(exchange) {
+	case "qmt":
+		c.JSON(http.StatusBadRequest, gin.H{"error": "QMT symbols require authenticated endpoint /api/qmt/symbols"})
+		return
 	case "hyperliquid", "hyperliquid-xyz", "xyz":
 		// Fetch symbols from Hyperliquid
 		client := hyperliquid.NewClient()
@@ -3394,6 +3453,7 @@ func (s *Server) handleGetSupportedExchanges(c *gin.Context) {
 		{ExchangeType: "hyperliquid", Name: "Hyperliquid", Type: "dex"},
 		{ExchangeType: "aster", Name: "Aster DEX", Type: "dex"},
 		{ExchangeType: "lighter", Name: "LIGHTER DEX", Type: "dex"},
+		{ExchangeType: "qmt", Name: "QMT (A Shares)", Type: "stock"},
 		{ExchangeType: "alpaca", Name: "Alpaca (US Stocks)", Type: "stock"},
 		{ExchangeType: "forex", Name: "Forex (TwelveData)", Type: "forex"},
 		{ExchangeType: "metals", Name: "Metals (TwelveData)", Type: "metals"},

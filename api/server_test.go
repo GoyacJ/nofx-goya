@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"nofx/store"
@@ -301,5 +302,94 @@ func TestPublicTraderListResponse_SystemPromptTemplate(t *testing.T) {
 	// Verify system_prompt_template value is correct
 	if response["system_prompt_template"] != "default" {
 		t.Errorf("Expected system_prompt_template='default', got %v", response["system_prompt_template"])
+	}
+}
+
+func TestCreateExchangeRequest_QMTFields(t *testing.T) {
+	payload := `{
+		"exchange_type": "qmt",
+		"account_name": "A-Share Account",
+		"enabled": true,
+		"qmt_gateway_url": "http://127.0.0.1:19090",
+		"qmt_account_id": "sim-001",
+		"qmt_gateway_token": "secret-token",
+		"qmt_market": "CN-A"
+	}`
+
+	var req CreateExchangeRequest
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if req.ExchangeType != "qmt" {
+		t.Fatalf("expected exchange_type=qmt, got %q", req.ExchangeType)
+	}
+	if req.QMTGatewayURL != "http://127.0.0.1:19090" {
+		t.Fatalf("unexpected qmt_gateway_url: %q", req.QMTGatewayURL)
+	}
+	if req.QMTAccountID != "sim-001" {
+		t.Fatalf("unexpected qmt_account_id: %q", req.QMTAccountID)
+	}
+	if req.QMTGatewayToken != "secret-token" {
+		t.Fatalf("unexpected qmt_gateway_token: %q", req.QMTGatewayToken)
+	}
+	if req.QMTMarket != "CN-A" {
+		t.Fatalf("unexpected qmt_market: %q", req.QMTMarket)
+	}
+}
+
+func TestUpdateExchangeConfigRequest_QMTFields(t *testing.T) {
+	payload := `{
+		"exchanges": {
+			"ex-001": {
+				"enabled": true,
+				"qmt_gateway_url": "http://127.0.0.1:19090",
+				"qmt_account_id": "sim-001",
+				"qmt_gateway_token": "token-abc",
+				"qmt_market": "CN-A"
+			}
+		}
+	}`
+
+	var req UpdateExchangeConfigRequest
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	cfg, ok := req.Exchanges["ex-001"]
+	if !ok {
+		t.Fatalf("expected exchange config ex-001")
+	}
+	if cfg.QMTGatewayURL != "http://127.0.0.1:19090" {
+		t.Fatalf("unexpected qmt_gateway_url: %q", cfg.QMTGatewayURL)
+	}
+	if cfg.QMTAccountID != "sim-001" {
+		t.Fatalf("unexpected qmt_account_id: %q", cfg.QMTAccountID)
+	}
+	if cfg.QMTGatewayToken != "token-abc" {
+		t.Fatalf("unexpected qmt_gateway_token: %q", cfg.QMTGatewayToken)
+	}
+	if cfg.QMTMarket != "CN-A" {
+		t.Fatalf("unexpected qmt_market: %q", cfg.QMTMarket)
+	}
+}
+
+func TestSafeExchangeConfig_QMTTokenExcluded(t *testing.T) {
+	safe := SafeExchangeConfig{
+		ExchangeType:  "qmt",
+		AccountName:   "A-Share Account",
+		QMTGatewayURL: "http://127.0.0.1:19090",
+		QMTAccountID:  "sim-001",
+		QMTMarket:     "CN-A",
+	}
+
+	data, err := json.Marshal(safe)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	jsonStr := string(data)
+	if strings.Contains(jsonStr, "qmt_gateway_token") || strings.Contains(jsonStr, "qmtGatewayToken") {
+		t.Fatalf("safe config should not expose qmt token, got: %s", jsonStr)
 	}
 }

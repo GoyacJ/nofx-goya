@@ -3,6 +3,7 @@ import { EquityChart } from './EquityChart'
 import { AdvancedChart } from './AdvancedChart'
 import { useLanguage } from '../contexts/LanguageContext'
 import { t } from '../i18n/translations'
+import { api } from '../lib/api'
 import { BarChart3, CandlestickChart, ChevronDown, Search } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -10,12 +11,13 @@ interface ChartTabsProps {
   traderId: string
   selectedSymbol?: string // 从外部选择的币种
   updateKey?: number // 强制更新的 key
-  exchangeId?: string // 交易所ID
+  exchangeType?: string // 交易所类型
+  exchangeId?: string // 交易所账户ID
 }
 
 type ChartTab = 'equity' | 'kline'
 type Interval = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d'
-type MarketType = 'hyperliquid' | 'crypto' | 'stocks' | 'forex' | 'metals'
+type MarketType = 'hyperliquid' | 'crypto' | 'stocks' | 'forex' | 'metals' | 'qmt'
 
 interface SymbolInfo {
   symbol: string
@@ -30,7 +32,10 @@ const MARKET_CONFIG = {
   stocks: { exchange: 'alpaca', defaultSymbol: 'AAPL', icon: '📈', label: { zh: '美股', en: 'Stocks' }, color: 'green', hasDropdown: false },
   forex: { exchange: 'forex', defaultSymbol: 'EUR/USD', icon: '💱', label: { zh: '外汇', en: 'Forex' }, color: 'blue', hasDropdown: false },
   metals: { exchange: 'metals', defaultSymbol: 'XAU/USD', icon: '🥇', label: { zh: '金属', en: 'Metals' }, color: 'amber', hasDropdown: false },
+  qmt: { exchange: 'qmt', defaultSymbol: '000001.SZ', icon: '🏮', label: { zh: 'A股', en: 'A-Shares' }, color: 'emerald', hasDropdown: true },
 }
+
+const CRYPTO_EXCHANGES = new Set(['binance', 'bybit', 'okx', 'bitget', 'gate', 'kucoin', 'aster', 'lighter'])
 
 const INTERVALS: { value: Interval; label: string }[] = [
   { value: '1m', label: '1m' },
@@ -42,59 +47,84 @@ const INTERVALS: { value: Interval; label: string }[] = [
   { value: '1d', label: '1d' },
 ]
 
-// 根据交易所ID推断市场类型
-function getMarketTypeFromExchange(exchangeId: string | undefined): MarketType {
-  if (!exchangeId) return 'hyperliquid'
-  const lower = exchangeId.toLowerCase()
+// 根据交易所类型推断市场类型
+function getMarketTypeFromExchange(exchangeType: string | undefined): MarketType {
+  if (!exchangeType) return 'hyperliquid'
+  const lower = exchangeType.toLowerCase()
+  if (lower === 'qmt') return 'qmt'
   if (lower.includes('hyperliquid')) return 'hyperliquid'
   // 其他交易所默认使用 crypto 类型
   return 'crypto'
 }
 
-export function ChartTabs({ traderId, selectedSymbol, updateKey, exchangeId }: ChartTabsProps) {
+export function ChartTabs({ traderId, selectedSymbol, updateKey, exchangeType, exchangeId }: ChartTabsProps) {
   const { language } = useLanguage()
   const [activeTab, setActiveTab] = useState<ChartTab>('equity')
   const [chartSymbol, setChartSymbol] = useState<string>('BTC')
   const [interval, setInterval] = useState<Interval>('5m')
   const [symbolInput, setSymbolInput] = useState('')
-  const [marketType, setMarketType] = useState<MarketType>(() => getMarketTypeFromExchange(exchangeId))
+  const [marketType, setMarketType] = useState<MarketType>(() => getMarketTypeFromExchange(exchangeType))
   const [availableSymbols, setAvailableSymbols] = useState<SymbolInfo[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // 当交易所ID变化时，自动切换市场类型
+  // 当交易所类型变化时，自动切换市场类型
   useEffect(() => {
-    const newMarketType = getMarketTypeFromExchange(exchangeId)
+    const newMarketType = getMarketTypeFromExchange(exchangeType)
     setMarketType(newMarketType)
-  }, [exchangeId])
+  }, [exchangeType])
 
   // 根据市场类型确定交易所
   const marketConfig = MARKET_CONFIG[marketType]
-  // 优先使用传入的 exchangeId（非 hyperliquid 时）
-  const currentExchange = marketType === 'hyperliquid' ? 'hyperliquid' : (exchangeId || marketConfig.exchange)
+  const normalizedExchangeType = (exchangeType || '').toLowerCase()
+  const cryptoExchange = CRYPTO_EXCHANGES.has(normalizedExchangeType) ? normalizedExchangeType : 'binance'
+  const currentExchange = marketType === 'crypto' ? cryptoExchange : marketConfig.exchange
 
   // 获取可用币种列表
   useEffect(() => {
-    if (marketConfig.hasDropdown) {
-      fetch(`/api/symbols?exchange=${marketConfig.exchange}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.symbols) {
-            // 按类别排序: crypto > stock > forex > commodity > index
-            const categoryOrder: Record<string, number> = { crypto: 0, stock: 1, forex: 2, commodity: 3, index: 4 }
-            const sorted = [...data.symbols].sort((a: SymbolInfo, b: SymbolInfo) => {
-              const orderA = categoryOrder[a.category] ?? 5
-              const orderB = categoryOrder[b.category] ?? 5
-              if (orderA !== orderB) return orderA - orderB
-              return a.symbol.localeCompare(b.symbol)
-            })
-            setAvailableSymbols(sorted)
-          }
-        })
-        .catch(err => console.error('Failed to fetch symbols:', err))
+    if (!marketConfig.hasDropdown) {
+      setAvailableSymbols([])
+      return
     }
-  }, [marketType, marketConfig.exchange, marketConfig.hasDropdown])
+
+    let mounted = true
+    ;(async () => {
+      try {
+        if (marketType === 'qmt') {
+          if (!exchangeId) {
+            setAvailableSymbols([])
+            return
+          }
+          const qmtSymbols = await api.getQMTSymbols(exchangeId, 'watchlist')
+          if (!mounted) return
+          setAvailableSymbols(qmtSymbols.map((s) => ({ symbol: s, name: s, category: 'stock' })))
+          return
+        }
+
+        const data = await api.getSymbols(marketConfig.exchange)
+        if (!mounted || !Array.isArray(data.symbols)) {
+          return
+        }
+
+        // 按类别排序: crypto > stock > forex > commodity > index
+        const categoryOrder: Record<string, number> = { crypto: 0, stock: 1, forex: 2, commodity: 3, index: 4 }
+        const sorted = [...data.symbols].sort((a: SymbolInfo, b: SymbolInfo) => {
+          const orderA = categoryOrder[a.category] ?? 5
+          const orderB = categoryOrder[b.category] ?? 5
+          if (orderA !== orderB) return orderA - orderB
+          return a.symbol.localeCompare(b.symbol)
+        })
+        setAvailableSymbols(sorted)
+      } catch (err) {
+        console.error('Failed to fetch symbols:', err)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [marketType, marketConfig.exchange, marketConfig.hasDropdown, exchangeId])
 
   // 点击外部关闭下拉
   useEffect(() => {
@@ -327,6 +357,7 @@ export function ChartTabs({ traderId, selectedSymbol, updateKey, exchangeId }: C
                 traderID={traderId}
                 // Dynamic auto-sizing via ResizeObserver
                 exchange={currentExchange}
+                exchangeId={exchangeId}
                 onSymbolChange={setChartSymbol}
               />
             </motion.div>

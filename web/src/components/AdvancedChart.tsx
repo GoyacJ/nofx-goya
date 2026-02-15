@@ -12,6 +12,7 @@ import {
 } from 'lightweight-charts'
 import { useLanguage } from '../contexts/LanguageContext'
 import { httpClient } from '../lib/httpClient'
+import { api } from '../lib/api'
 import {
   calculateSMA,
   calculateEMA,
@@ -50,6 +51,7 @@ interface AdvancedChartProps {
   traderID?: string
   height?: number
   exchange?: string // 交易所类型：binance, bybit, okx, bitget, hyperliquid, aster, lighter
+  exchangeId?: string // 交易所账户ID (QMT 等账户级行情接口需要)
   onSymbolChange?: (symbol: string) => void // 币种切换回调
 }
 
@@ -67,6 +69,9 @@ const getQuoteUnit = (exchange: string): string => {
   if (['alpaca'].includes(exchange)) {
     return 'USD'
   }
+  if (['qmt'].includes(exchange)) {
+    return 'CNY'
+  }
   if (['forex', 'metals'].includes(exchange)) {
     return '' // 外汇/贵金属没有真实成交量
   }
@@ -75,7 +80,7 @@ const getQuoteUnit = (exchange: string): string => {
 
 // 获取成交量数量单位
 const getBaseUnit = (exchange: string, symbol: string): string => {
-  if (['alpaca'].includes(exchange)) {
+  if (['alpaca', 'qmt'].includes(exchange)) {
     return '股'
   }
   if (['forex', 'metals'].includes(exchange)) {
@@ -100,6 +105,7 @@ export function AdvancedChart({
   traderID,
   height = 550,
   exchange = 'binance', // 默认使用 binance
+  exchangeId,
   onSymbolChange: _onSymbolChange, // Available for future use
 }: AdvancedChartProps) {
   void _onSymbolChange // Prevent unused warning
@@ -151,15 +157,15 @@ export function AdvancedChart({
   const fetchKlineData = async (symbol: string, interval: string) => {
     try {
       const limit = 1500
-      const klineUrl = `/api/klines?symbol=${symbol}&interval=${interval}&limit=${limit}&exchange=${exchange}`
-      const result = await httpClient.get(klineUrl)
-
-      if (!result.success || !result.data) {
-        throw new Error('Failed to fetch kline data')
+      if (exchange === 'qmt' && !exchangeId) {
+        throw new Error('QMT exchange account is required')
       }
+      const rawKlines = exchange === 'qmt'
+        ? await api.getQMTKlines(exchangeId || '', symbol, interval, limit)
+        : await api.getKlines(symbol, interval, limit, exchange)
 
       // 转换数据格式
-      const rawData = result.data.map((candle: any) => ({
+      const rawData = rawKlines.map((candle: any) => ({
         time: Math.floor(candle.openTime / 1000) as UTCTimestamp,
         open: candle.open,
         high: candle.high,
@@ -739,7 +745,7 @@ export function AdvancedChart({
     // 实时自动刷新 (5秒更新一次)
     const refreshInterval = setInterval(() => loadData(true), 5000)
     return () => clearInterval(refreshInterval)
-  }, [symbol, interval, traderID, exchange])
+  }, [symbol, interval, traderID, exchange, exchangeId])
 
   // 单独刷新挂单价格线 (60秒刷新一次，避免频繁调用交易所API)
   useEffect(() => {

@@ -370,7 +370,7 @@ func GetWithTimeframes(symbol string, timeframes []string, primaryTimeframe stri
 	currentRSI7 := calculateRSI(primaryKlines, 7)
 
 	// Calculate price changes
-	priceChange1h := calculatePriceChangeByBars(primaryKlines, primaryTimeframe, 60) // 1 hour
+	priceChange1h := calculatePriceChangeByBars(primaryKlines, primaryTimeframe, 60)  // 1 hour
 	priceChange4h := calculatePriceChangeByBars(primaryKlines, primaryTimeframe, 240) // 4 hours
 
 	// Get OI data
@@ -1090,6 +1090,10 @@ func IsXyzDexAsset(symbol string) bool {
 func Normalize(symbol string) string {
 	symbol = strings.ToUpper(symbol)
 
+	if isLikelyCNSymbolInput(symbol) {
+		return NormalizeCN(symbol)
+	}
+
 	// Check if this is an xyz dex asset
 	if IsXyzDexAsset(symbol) {
 		// Remove any xyz: prefix (case-insensitive) and USDT suffix, then add xyz: prefix
@@ -1117,6 +1121,84 @@ func Normalize(symbol string) string {
 		return symbol
 	}
 	return symbol + "USDT"
+}
+
+// NormalizeCN normalizes A-share symbols to 6-digit code with market suffix.
+// Examples: 600519 -> 600519.SH, 000001 -> 000001.SZ, sh600519 -> 600519.SH
+func NormalizeCN(symbol string) string {
+	s := strings.ToUpper(strings.TrimSpace(symbol))
+	s = strings.ReplaceAll(s, "-", "")
+	s = strings.ReplaceAll(s, "_", "")
+	s = strings.ReplaceAll(s, " ", "")
+
+	market := ""
+	code := s
+
+	switch {
+	case strings.HasPrefix(code, "SH"):
+		market = "SH"
+		code = strings.TrimPrefix(code, "SH")
+	case strings.HasPrefix(code, "SZ"):
+		market = "SZ"
+		code = strings.TrimPrefix(code, "SZ")
+	case strings.HasSuffix(code, ".SH"):
+		market = "SH"
+		code = strings.TrimSuffix(code, ".SH")
+	case strings.HasSuffix(code, ".SZ"):
+		market = "SZ"
+		code = strings.TrimSuffix(code, ".SZ")
+	case strings.HasSuffix(code, "SH"):
+		market = "SH"
+		code = strings.TrimSuffix(code, "SH")
+	case strings.HasSuffix(code, "SZ"):
+		market = "SZ"
+		code = strings.TrimSuffix(code, "SZ")
+	}
+
+	if len(code) != 6 || !isDigits(code) {
+		return s
+	}
+
+	if market == "" {
+		if strings.HasPrefix(code, "6") || strings.HasPrefix(code, "9") {
+			market = "SH"
+		} else {
+			market = "SZ"
+		}
+	}
+
+	return code + "." + market
+}
+
+// NormalizeByExchange normalizes symbols using exchange-specific rules.
+func NormalizeByExchange(exchangeType, symbol string) string {
+	if strings.EqualFold(exchangeType, "qmt") {
+		return NormalizeCN(symbol)
+	}
+	return Normalize(symbol)
+}
+
+func isDigits(s string) bool {
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isLikelyCNSymbolInput(symbol string) bool {
+	s := strings.ToUpper(strings.TrimSpace(symbol))
+	if strings.Contains(s, ".SH") || strings.Contains(s, ".SZ") {
+		return true
+	}
+	if strings.HasPrefix(s, "SH") || strings.HasPrefix(s, "SZ") {
+		return len(s) >= 8
+	}
+	if strings.HasSuffix(s, "SH") || strings.HasSuffix(s, "SZ") {
+		return len(s) >= 8
+	}
+	return len(s) == 6 && isDigits(s)
 }
 
 // parseFloat parses float value

@@ -566,10 +566,11 @@ export function TraderDashboardPage({
                                 traderId={selectedTrader.trader_id}
                                 selectedSymbol={selectedChartSymbol}
                                 updateKey={chartUpdateKey}
-                                exchangeId={getExchangeTypeFromList(
+                                exchangeType={getExchangeTypeFromList(
                                     selectedTrader.exchange_id,
                                     exchanges
                                 )}
+                                exchangeId={selectedTrader.exchange_id}
                             />
                         </div>
 

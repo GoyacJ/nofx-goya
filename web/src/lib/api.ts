@@ -447,6 +447,72 @@ export const api = {
     return result.data!
   },
 
+  // Public market data
+  async getKlines(
+    symbol: string,
+    interval: string,
+    limit: number,
+    exchange: string
+  ): Promise<any[]> {
+    const query = new URLSearchParams({
+      symbol,
+      interval,
+      limit: String(limit),
+      exchange,
+    })
+    const result = await httpClient.get<any[]>(`${API_BASE}/klines?${query.toString()}`)
+    if (!result.success) throw new Error(result.message || '获取K线数据失败')
+    return Array.isArray(result.data) ? result.data : []
+  },
+
+  async getSymbols(exchange: string): Promise<{ symbols: any[]; count?: number }> {
+    const query = new URLSearchParams({ exchange })
+    const result = await httpClient.get<{ symbols: any[]; count?: number }>(
+      `${API_BASE}/symbols?${query.toString()}`
+    )
+    if (!result.success) throw new Error(result.message || '获取交易标的失败')
+    return result.data || { symbols: [] }
+  },
+
+  // Protected QMT market data (account-scoped via exchange_id)
+  async getQMTKlines(
+    exchangeId: string,
+    symbol: string,
+    interval: string = '5m',
+    limit: number = 500
+  ): Promise<any[]> {
+    const query = new URLSearchParams({
+      exchange_id: exchangeId,
+      symbol,
+      interval,
+      limit: String(limit),
+    })
+    const result = await httpClient.get<any[]>(
+      `${API_BASE}/qmt/klines?${query.toString()}`
+    )
+    if (!result.success) throw new Error(result.message || '获取QMT K线失败')
+    return Array.isArray(result.data) ? result.data : []
+  },
+
+  async getQMTSymbols(
+    exchangeId: string,
+    scope: 'watchlist' | 'sector' = 'watchlist',
+    sector?: string
+  ): Promise<string[]> {
+    const query = new URLSearchParams({
+      exchange_id: exchangeId,
+      scope,
+    })
+    if (scope === 'sector' && sector) {
+      query.set('sector', sector)
+    }
+    const result = await httpClient.get<{ symbols: string[] }>(
+      `${API_BASE}/qmt/symbols?${query.toString()}`
+    )
+    if (!result.success) throw new Error(result.message || '获取QMT标的失败')
+    return Array.isArray(result.data?.symbols) ? result.data!.symbols : []
+  },
+
   // 获取服务器IP（需要认证，用于白名单配置）
   async getServerIP(): Promise<{
     public_ip: string

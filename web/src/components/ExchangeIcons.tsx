@@ -17,6 +17,7 @@ const ICON_PATHS: Record<string, string> = {
   hyperliquid: '/exchange-icons/hyperliquid.png',
   aster: '/exchange-icons/aster.svg',
   lighter: '/exchange-icons/lighter.png',
+  qmt: '/exchange-icons/qmt.svg',
 }
 
 // 通用图标组件
@@ -101,6 +102,8 @@ export const getExchangeIcon = (
                   ? 'aster'
                   : lowerType.includes('lighter')
                     ? 'lighter'
+                    : lowerType.includes('qmt')
+                      ? 'qmt'
                     : lowerType
 
   const iconProps = {
