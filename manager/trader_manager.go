@@ -684,24 +684,30 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 	case "binance":
 		traderConfig.BinanceAPIKey = string(exchangeCfg.APIKey)
 		traderConfig.BinanceSecretKey = string(exchangeCfg.SecretKey)
+		traderConfig.BinanceTestnet = exchangeCfg.Testnet
 	case "bybit":
 		traderConfig.BybitAPIKey = string(exchangeCfg.APIKey)
 		traderConfig.BybitSecretKey = string(exchangeCfg.SecretKey)
+		traderConfig.BybitTestnet = exchangeCfg.Testnet
 	case "okx":
 		traderConfig.OKXAPIKey = string(exchangeCfg.APIKey)
 		traderConfig.OKXSecretKey = string(exchangeCfg.SecretKey)
 		traderConfig.OKXPassphrase = string(exchangeCfg.Passphrase)
+		traderConfig.OKXTestnet = exchangeCfg.Testnet
 	case "bitget":
 		traderConfig.BitgetAPIKey = string(exchangeCfg.APIKey)
 		traderConfig.BitgetSecretKey = string(exchangeCfg.SecretKey)
 		traderConfig.BitgetPassphrase = string(exchangeCfg.Passphrase)
+		traderConfig.BitgetTestnet = exchangeCfg.Testnet
 	case "gate":
 		traderConfig.GateAPIKey = string(exchangeCfg.APIKey)
 		traderConfig.GateSecretKey = string(exchangeCfg.SecretKey)
+		traderConfig.GateTestnet = exchangeCfg.Testnet
 	case "kucoin":
 		traderConfig.KuCoinAPIKey = string(exchangeCfg.APIKey)
 		traderConfig.KuCoinSecretKey = string(exchangeCfg.SecretKey)
 		traderConfig.KuCoinPassphrase = string(exchangeCfg.Passphrase)
+		traderConfig.KuCoinTestnet = exchangeCfg.Testnet
 	case "hyperliquid":
 		traderConfig.HyperliquidPrivateKey = string(exchangeCfg.APIKey)
 		traderConfig.HyperliquidWalletAddr = exchangeCfg.HyperliquidWalletAddr
@@ -709,6 +715,7 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 		traderConfig.AsterUser = exchangeCfg.AsterUser
 		traderConfig.AsterSigner = exchangeCfg.AsterSigner
 		traderConfig.AsterPrivateKey = string(exchangeCfg.AsterPrivateKey)
+		traderConfig.AsterTestnet = exchangeCfg.Testnet
 	case "lighter":
 		traderConfig.LighterPrivateKey = string(exchangeCfg.LighterPrivateKey)
 		traderConfig.LighterWalletAddr = exchangeCfg.LighterWalletAddr

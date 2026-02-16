@@ -629,6 +629,15 @@ func (s *Server) runRealAITest(userID, modelID, systemPrompt, userPrompt string)
 	case "minimax":
 		aiClient = mcp.NewMiniMaxClient()
 		aiClient.SetAPIKey(apiKey, model.CustomAPIURL, model.CustomModelName)
+	case "openclaw":
+		if strings.TrimSpace(model.CustomAPIURL) == "" {
+			return "", fmt.Errorf("OpenClaw requires base URL")
+		}
+		if strings.TrimSpace(model.CustomModelName) == "" {
+			return "", fmt.Errorf("OpenClaw requires model name")
+		}
+		aiClient = mcp.NewOpenClawClient()
+		aiClient.SetAPIKey(apiKey, model.CustomAPIURL, model.CustomModelName)
 	default:
 		// Use generic client
 		aiClient = mcp.NewClient()

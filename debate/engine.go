@@ -89,6 +89,8 @@ func (e *DebateEngine) InitializeClients(participants []*store.DebateParticipant
 			client = mcp.NewQwenClient()
 		case "openai":
 			client = mcp.NewOpenAIClient()
+		case "openclaw":
+			client = mcp.NewOpenClawClient()
 		case "minimax":
 			client = mcp.NewMiniMaxClient()
 		case "claude":
@@ -101,6 +103,12 @@ func (e *DebateEngine) InitializeClients(participants []*store.DebateParticipant
 			client = mcp.NewKimiClient()
 		default:
 			client = mcp.New()
+		}
+
+		if strings.EqualFold(aiModel.Provider, "openclaw") {
+			if strings.TrimSpace(aiModel.CustomAPIURL) == "" || strings.TrimSpace(aiModel.CustomModelName) == "" {
+				return fmt.Errorf("openclaw model %s requires base URL and model name", aiModel.Name)
+			}
 		}
 
 		// Configure client (convert EncryptedString to string)

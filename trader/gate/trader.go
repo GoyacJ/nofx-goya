@@ -15,10 +15,16 @@ import (
 	"nofx/trader/types"
 )
 
+const (
+	gateBasePathMainnet = "https://api.gateio.ws/api/v4"
+	gateBasePathTestnet = "https://fx-api-testnet.gateio.ws/api/v4"
+)
+
 // GateTrader implements types.Trader interface for Gate.io Futures
 type GateTrader struct {
 	apiKey    string
 	secretKey string
+	testnet   bool
 	client    *gateapi.APIClient
 	ctx       context.Context
 
@@ -36,7 +42,15 @@ type GateTrader struct {
 
 // NewGateTrader creates a new Gate trader instance
 func NewGateTrader(apiKey, secretKey string) *GateTrader {
+	return NewGateTraderWithTestnet(apiKey, secretKey, false)
+}
+
+// NewGateTraderWithTestnet creates a new Gate trader and supports testnet/mainnet.
+func NewGateTraderWithTestnet(apiKey, secretKey string, testnet bool) *GateTrader {
 	config := gateapi.NewConfiguration()
+	if testnet {
+		config.BasePath = gateBasePathTestnet
+	}
 	config.AddDefaultHeader("X-Gate-Channel-Id", "nofx")
 	client := gateapi.NewAPIClient(config)
 
@@ -48,14 +62,17 @@ func NewGateTrader(apiKey, secretKey string) *GateTrader {
 		},
 	)
 
-	return &GateTrader{
+	trader := &GateTrader{
 		apiKey:         apiKey,
 		secretKey:      secretKey,
+		testnet:        testnet,
 		client:         client,
 		ctx:            ctx,
 		contractsCache: make(map[string]*gateapi.Contract),
 		cacheDuration:  15 * time.Second,
 	}
+	logger.Infof("✓ Gate trader initialized (testnet=%v)", testnet)
+	return trader
 }
 
 // GetBalance retrieves account balance

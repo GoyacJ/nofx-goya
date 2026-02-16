@@ -39,29 +39,35 @@ type AutoTraderConfig struct {
 	// Binance API configuration
 	BinanceAPIKey    string
 	BinanceSecretKey string
+	BinanceTestnet   bool
 
 	// Bybit API configuration
 	BybitAPIKey    string
 	BybitSecretKey string
+	BybitTestnet   bool
 
 	// OKX API configuration
 	OKXAPIKey     string
 	OKXSecretKey  string
 	OKXPassphrase string
+	OKXTestnet    bool
 
 	// Bitget API configuration
 	BitgetAPIKey     string
 	BitgetSecretKey  string
 	BitgetPassphrase string
+	BitgetTestnet    bool
 
 	// Gate API configuration
 	GateAPIKey    string
 	GateSecretKey string
+	GateTestnet   bool
 
 	// KuCoin API configuration
 	KuCoinAPIKey     string
 	KuCoinSecretKey  string
 	KuCoinPassphrase string
+	KuCoinTestnet    bool
 
 	// Hyperliquid configuration
 	HyperliquidPrivateKey string
@@ -72,6 +78,7 @@ type AutoTraderConfig struct {
 	AsterUser       string // Aster main wallet address
 	AsterSigner     string // Aster API wallet address
 	AsterPrivateKey string // Aster API wallet private key
+	AsterTestnet    bool
 
 	// LIGHTER configuration
 	LighterWalletAddr       string // LIGHTER wallet address (L1 wallet)
@@ -175,6 +182,17 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	if config.UseQwen && aiModel == "" {
 		aiModel = "qwen"
 	}
+	if aiModel == "openclaw" {
+		if strings.TrimSpace(config.CustomAPIKey) == "" {
+			return nil, fmt.Errorf("openclaw requires api key")
+		}
+		if strings.TrimSpace(config.CustomAPIURL) == "" {
+			return nil, fmt.Errorf("openclaw requires base URL")
+		}
+		if strings.TrimSpace(config.CustomModelName) == "" {
+			return nil, fmt.Errorf("openclaw requires model name")
+		}
+	}
 
 	switch aiModel {
 	case "claude":
@@ -201,6 +219,11 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		mcpClient = mcp.NewOpenAIClient()
 		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
 		logger.Infof("🤖 [%s] Using OpenAI", config.Name)
+
+	case "openclaw":
+		mcpClient = mcp.NewOpenClawClient()
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
+		logger.Infof("🤖 [%s] Using OpenClaw gateway", config.Name)
 
 	case "minimax":
 		mcpClient = mcp.NewMiniMaxClient()
@@ -254,22 +277,22 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	switch config.Exchange {
 	case "binance":
 		logger.Infof("🏦 [%s] Using Binance Futures trading", config.Name)
-		trader = binance.NewFuturesTrader(config.BinanceAPIKey, config.BinanceSecretKey, userID)
+		trader = binance.NewFuturesTraderWithTestnet(config.BinanceAPIKey, config.BinanceSecretKey, userID, config.BinanceTestnet)
 	case "bybit":
 		logger.Infof("🏦 [%s] Using Bybit Futures trading", config.Name)
-		trader = bybit.NewBybitTrader(config.BybitAPIKey, config.BybitSecretKey)
+		trader = bybit.NewBybitTraderWithTestnet(config.BybitAPIKey, config.BybitSecretKey, config.BybitTestnet)
 	case "okx":
 		logger.Infof("🏦 [%s] Using OKX Futures trading", config.Name)
-		trader = okx.NewOKXTrader(config.OKXAPIKey, config.OKXSecretKey, config.OKXPassphrase)
+		trader = okx.NewOKXTrader(config.OKXAPIKey, config.OKXSecretKey, config.OKXPassphrase, config.OKXTestnet)
 	case "bitget":
 		logger.Infof("🏦 [%s] Using Bitget Futures trading", config.Name)
-		trader = bitget.NewBitgetTrader(config.BitgetAPIKey, config.BitgetSecretKey, config.BitgetPassphrase)
+		trader = bitget.NewBitgetTraderWithTestnet(config.BitgetAPIKey, config.BitgetSecretKey, config.BitgetPassphrase, config.BitgetTestnet)
 	case "gate":
 		logger.Infof("🏦 [%s] Using Gate.io Futures trading", config.Name)
-		trader = gate.NewGateTrader(config.GateAPIKey, config.GateSecretKey)
+		trader = gate.NewGateTraderWithTestnet(config.GateAPIKey, config.GateSecretKey, config.GateTestnet)
 	case "kucoin":
 		logger.Infof("🏦 [%s] Using KuCoin Futures trading", config.Name)
-		trader = kucoin.NewKuCoinTrader(config.KuCoinAPIKey, config.KuCoinSecretKey, config.KuCoinPassphrase)
+		trader = kucoin.NewKuCoinTraderWithTestnet(config.KuCoinAPIKey, config.KuCoinSecretKey, config.KuCoinPassphrase, config.KuCoinTestnet)
 	case "hyperliquid":
 		logger.Infof("🏦 [%s] Using Hyperliquid trading", config.Name)
 		trader, err = hyperliquid.NewHyperliquidTrader(config.HyperliquidPrivateKey, config.HyperliquidWalletAddr, config.HyperliquidTestnet)
@@ -278,7 +301,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		}
 	case "aster":
 		logger.Infof("🏦 [%s] Using Aster trading", config.Name)
-		trader, err = aster.NewAsterTrader(config.AsterUser, config.AsterSigner, config.AsterPrivateKey)
+		trader, err = aster.NewAsterTraderWithTestnet(config.AsterUser, config.AsterSigner, config.AsterPrivateKey, config.AsterTestnet)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize Aster trader: %w", err)
 		}
@@ -289,12 +312,11 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 			return nil, fmt.Errorf("Lighter requires wallet address and API Key private key")
 		}
 
-		// Lighter only supports mainnet (testnet disabled)
 		trader, err = lighter.NewLighterTraderV2(
 			config.LighterWalletAddr,
 			config.LighterAPIKeyPrivateKey,
 			config.LighterAPIKeyIndex,
-			false, // Always use mainnet for Lighter
+			config.LighterTestnet,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize LIGHTER trader: %w", err)

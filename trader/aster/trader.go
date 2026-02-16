@@ -8,12 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"nofx/logger"
 	"math"
 	"math/big"
 	"net/http"
 	"net/url"
 	"nofx/hook"
+	"nofx/logger"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,11 +35,17 @@ type AsterTrader struct {
 	privateKey *ecdsa.PrivateKey // API wallet private key
 	client     *http.Client
 	baseURL    string
+	testnet    bool
 
 	// Cache symbol precision information
 	symbolPrecision map[string]SymbolPrecision
 	mu              sync.RWMutex
 }
+
+const (
+	asterMainnetBaseURL = "https://fapi.asterdex.com"
+	asterTestnetBaseURL = "https://fapi-testnet.asterdex.com"
+)
 
 // SymbolPrecision Symbol precision information
 type SymbolPrecision struct {
@@ -53,6 +60,12 @@ type SymbolPrecision struct {
 // signer: API wallet address (obtained from https://www.asterdex.com/en/api-wallet)
 // privateKey: API wallet private key (obtained from https://www.asterdex.com/en/api-wallet)
 func NewAsterTrader(user, signer, privateKeyHex string) (*AsterTrader, error) {
+	return NewAsterTraderWithTestnet(user, signer, privateKeyHex, false)
+}
+
+// NewAsterTraderWithTestnet creates an Aster trader and supports testnet/mainnet.
+// `ASTER_TESTNET_BASE_URL` can override the default testnet endpoint.
+func NewAsterTraderWithTestnet(user, signer, privateKeyHex string, testnet bool) (*AsterTrader, error) {
 	// Parse private key
 	privKey, err := crypto.HexToECDSA(strings.TrimPrefix(privateKeyHex, "0x"))
 	if err != nil {
@@ -71,15 +84,26 @@ func NewAsterTrader(user, signer, privateKeyHex string) (*AsterTrader, error) {
 		client = res.GetResult()
 	}
 
-	return &AsterTrader{
+	baseURL := asterMainnetBaseURL
+	if testnet {
+		baseURL = asterTestnetBaseURL
+		if override := strings.TrimSpace(os.Getenv("ASTER_TESTNET_BASE_URL")); override != "" {
+			baseURL = strings.TrimRight(override, "/")
+		}
+	}
+
+	trader := &AsterTrader{
 		ctx:             context.Background(),
 		user:            user,
 		signer:          signer,
 		privateKey:      privKey,
 		symbolPrecision: make(map[string]SymbolPrecision),
 		client:          client,
-		baseURL:         "https://fapi.asterdex.com",
-	}, nil
+		baseURL:         baseURL,
+		testnet:         testnet,
+	}
+	logger.Infof("✓ Aster trader initialized (testnet=%v, baseURL=%s)", testnet, baseURL)
+	return trader, nil
 }
 
 // genNonce Generate microsecond timestamp
@@ -1263,14 +1287,14 @@ func (t *AsterTrader) GetOrderStatus(symbol string, orderID string) (map[string]
 
 	// Standardize return fields
 	response := map[string]interface{}{
-		"orderId":     result["orderId"],
-		"symbol":      result["symbol"],
-		"status":      result["status"],
-		"side":        result["side"],
-		"type":        result["type"],
-		"time":        result["time"],
-		"updateTime":  result["updateTime"],
-		"commission":  0.0, // Aster may require separate query
+		"orderId":    result["orderId"],
+		"symbol":     result["symbol"],
+		"status":     result["status"],
+		"side":       result["side"],
+		"type":       result["type"],
+		"time":       result["time"],
+		"updateTime": result["updateTime"],
+		"commission": 0.0, // Aster may require separate query
 	}
 
 	// Parse numeric fields

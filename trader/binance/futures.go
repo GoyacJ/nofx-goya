@@ -64,7 +64,15 @@ type FuturesTrader struct {
 
 // NewFuturesTrader creates futures trader
 func NewFuturesTrader(apiKey, secretKey string, userId string) *FuturesTrader {
+	return NewFuturesTraderWithTestnet(apiKey, secretKey, userId, false)
+}
+
+// NewFuturesTraderWithTestnet creates futures trader and supports Binance Futures testnet.
+func NewFuturesTraderWithTestnet(apiKey, secretKey string, userId string, testnet bool) *FuturesTrader {
 	client := futures.NewClient(apiKey, secretKey)
+	if testnet {
+		client.SetApiEndpoint("https://testnet.binancefuture.com")
+	}
 
 	hookRes := hook.HookExec[hook.NewBinanceTraderResult](hook.NEW_BINANCE_TRADER, userId, client)
 	if hookRes != nil && hookRes.GetResult() != nil {
@@ -82,6 +90,10 @@ func NewFuturesTrader(apiKey, secretKey string, userId string) *FuturesTrader {
 	// This is required because the code uses PositionSide (LONG/SHORT)
 	if err := trader.setDualSidePosition(); err != nil {
 		logger.Infof("⚠️ Failed to set dual-side position mode: %v (ignore this warning if already in dual-side mode)", err)
+	}
+
+	if testnet {
+		logger.Infof("✓ Binance futures trader initialized (testnet=true)")
 	}
 
 	return trader

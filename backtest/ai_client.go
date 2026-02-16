@@ -71,6 +71,16 @@ func configureMCPClient(cfg BacktestConfig, base mcp.AIClient) (mcp.AIClient, er
 		oaiC := mcp.NewOpenAIClientWithOptions()
 		oaiC.(*mcp.OpenAIClient).SetAPIKey(cfg.AICfg.APIKey, cfg.AICfg.BaseURL, cfg.AICfg.Model)
 		return oaiC, nil
+	case "openclaw":
+		if cfg.AICfg.APIKey == "" {
+			return nil, fmt.Errorf("openclaw provider requires api key")
+		}
+		if strings.TrimSpace(cfg.AICfg.BaseURL) == "" || strings.TrimSpace(cfg.AICfg.Model) == "" {
+			return nil, fmt.Errorf("openclaw provider requires base_url and model")
+		}
+		ocC := mcp.NewOpenClawClientWithOptions()
+		ocC.(*mcp.OpenClawClient).SetAPIKey(cfg.AICfg.APIKey, cfg.AICfg.BaseURL, cfg.AICfg.Model)
+		return ocC, nil
 	case "minimax":
 		if cfg.AICfg.APIKey == "" {
 			return nil, fmt.Errorf("minimax provider requires api key")
@@ -128,6 +138,11 @@ func cloneBaseClient(base mcp.AIClient) *mcp.Client {
 			return &cp
 		}
 	case *mcp.OpenAIClient:
+		if c != nil && c.Client != nil {
+			cp := *c.Client
+			return &cp
+		}
+	case *mcp.OpenClawClient:
 		if c != nil && c.Client != nil {
 			cp := *c.Client
 			return &cp

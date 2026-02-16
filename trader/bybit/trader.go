@@ -25,6 +25,7 @@ type BybitTrader struct {
 	client    *bybit.Client
 	apiKey    string
 	secretKey string
+	baseURL   string
 
 	// Balance cache
 	cachedBalance     map[string]interface{}
@@ -46,9 +47,18 @@ type BybitTrader struct {
 
 // NewBybitTrader creates a Bybit trader
 func NewBybitTrader(apiKey, secretKey string) *BybitTrader {
-	const src = "Up000938"
+	return NewBybitTraderWithTestnet(apiKey, secretKey, false)
+}
 
-	client := bybit.NewBybitHttpClient(apiKey, secretKey, bybit.WithBaseURL(bybit.MAINNET))
+// NewBybitTraderWithTestnet creates a Bybit trader and supports testnet/mainnet.
+func NewBybitTraderWithTestnet(apiKey, secretKey string, testnet bool) *BybitTrader {
+	const src = "Up000938"
+	baseURL := "https://api.bybit.com"
+	if testnet {
+		baseURL = "https://api-testnet.bybit.com"
+	}
+
+	client := bybit.NewBybitHttpClient(apiKey, secretKey, bybit.WithBaseURL(baseURL))
 
 	// Set HTTP transport
 	if client != nil && client.HTTPClient != nil {
@@ -67,11 +77,12 @@ func NewBybitTrader(apiKey, secretKey string) *BybitTrader {
 		client:        client,
 		apiKey:        apiKey,
 		secretKey:     secretKey,
+		baseURL:       baseURL,
 		cacheDuration: 15 * time.Second,
 		qtyStepCache:  make(map[string]float64),
 	}
 
-	logger.Infof("🔵 [Bybit] Trader initialized")
+	logger.Infof("🔵 [Bybit] Trader initialized (testnet=%v)", testnet)
 
 	return trader
 }
@@ -682,7 +693,7 @@ func (t *BybitTrader) getQtyStep(symbol string) float64 {
 	t.qtyStepCacheMutex.RUnlock()
 
 	// Call public API directly to get contract information
-	url := fmt.Sprintf("https://api.bybit.com/v5/market/instruments-info?category=linear&symbol=%s", symbol)
+	url := fmt.Sprintf("%s/v5/market/instruments-info?category=linear&symbol=%s", t.baseURL, symbol)
 	resp, err := http.Get(url)
 	if err != nil {
 		logger.Infof("⚠️ [Bybit] Failed to get precision info for %s: %v", symbol, err)
@@ -910,7 +921,7 @@ func (t *BybitTrader) GetClosedPnL(startTime time.Time, limit int) ([]types.Clos
 func (t *BybitTrader) getClosedPnLViaHTTP(startTime time.Time, limit int) ([]types.ClosedPnLRecord, error) {
 	// Build query string
 	queryParams := fmt.Sprintf("category=linear&startTime=%d&limit=%d", startTime.UnixMilli(), limit)
-	url := "https://api.bybit.com/v5/position/closed-pnl?" + queryParams
+	url := t.baseURL + "/v5/position/closed-pnl?" + queryParams
 
 	// Generate timestamp
 	timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
@@ -1212,7 +1223,7 @@ func (t *BybitTrader) GetOrderBook(symbol string, depth int) (bids, asks [][]flo
 	}
 
 	// Use HTTP request directly since the SDK doesn't expose GetOrderbook
-	url := fmt.Sprintf("https://api.bybit.com/v5/market/orderbook?category=linear&symbol=%s&limit=%d", symbol, depth)
+	url := fmt.Sprintf("%s/v5/market/orderbook?category=linear&symbol=%s&limit=%d", t.baseURL, symbol, depth)
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get order book: %w", err)

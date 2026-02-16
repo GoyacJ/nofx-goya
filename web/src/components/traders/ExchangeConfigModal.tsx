@@ -33,6 +33,18 @@ const SUPPORTED_EXCHANGE_TEMPLATES = [
   { exchange_type: 'qmt', name: 'QMT A-Shares', type: 'stock' as const },
 ]
 
+const TESTNET_SUPPORTED_EXCHANGES = new Set([
+  'binance',
+  'bybit',
+  'okx',
+  'bitget',
+  'kucoin',
+  'gate',
+  'hyperliquid',
+  'aster',
+  'lighter',
+])
+
 interface ExchangeConfigModalProps {
   allExchanges: Exchange[]
   editingExchangeId: string | null
@@ -214,6 +226,8 @@ export function ExchangeConfigModal({
   const currentExchangeType = editingExchangeId
     ? selectedExchange?.exchange_type
     : selectedExchangeType
+  const supportsTestnet = !!currentExchangeType && TESTNET_SUPPORTED_EXCHANGES.has(currentExchangeType)
+  const showEnvironmentMode = !!currentExchangeType && currentExchangeType !== 'qmt'
 
   const exchangeRegistrationLinks: Record<string, { url: string; hasReferral?: boolean }> = {
     binance: { url: 'https://www.binance.com/join?ref=NOFXENG', hasReferral: true },
@@ -260,6 +274,12 @@ export function ExchangeConfigModal({
         .finally(() => setLoadingIP(false))
     }
   }, [currentExchangeType, serverIP])
+
+  useEffect(() => {
+    if (!supportsTestnet) {
+      setTestnet(false)
+    }
+  }, [supportsTestnet])
 
   const handleCopyIP = async (ip: string) => {
     try {
@@ -571,6 +591,44 @@ export function ExchangeConfigModal({
                   required
                 />
               </div>
+
+              {showEnvironmentMode && (
+                <div className="p-4 rounded-xl" style={{ background: '#0B0E11', border: '1px solid #2B3139' }}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                        {language === 'zh' ? '交易环境' : 'Trading Environment'}
+                      </div>
+                      <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
+                        {supportsTestnet
+                          ? t('testnetDescription', language)
+                          : (language === 'zh' ? '该交易所当前仅支持实盘模式。' : 'This exchange currently supports live mode only.')}
+                      </div>
+                    </div>
+                    {supportsTestnet ? (
+                      <button
+                        type="button"
+                        onClick={() => setTestnet((v) => !v)}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all"
+                        style={{
+                          background: testnet ? 'rgba(245, 158, 11, 0.18)' : 'rgba(14, 203, 129, 0.16)',
+                          color: testnet ? '#F59E0B' : '#0ECB81',
+                          border: testnet ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(14, 203, 129, 0.45)',
+                        }}
+                      >
+                        <span>{testnet ? (language === 'zh' ? '模拟盘' : 'Testnet') : (language === 'zh' ? '实盘' : 'Live')}</span>
+                      </button>
+                    ) : (
+                      <div
+                        className="inline-flex items-center px-3 py-2 rounded-lg text-xs font-semibold"
+                        style={{ background: 'rgba(148, 163, 184, 0.16)', color: '#94A3B8', border: '1px solid rgba(148, 163, 184, 0.35)' }}
+                      >
+                        {language === 'zh' ? '仅实盘' : 'Live Only'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* CEX Fields */}
               {(currentExchangeType === 'binance' || currentExchangeType === 'bybit' || currentExchangeType === 'okx' || currentExchangeType === 'bitget' || currentExchangeType === 'gate' || currentExchangeType === 'kucoin') && (

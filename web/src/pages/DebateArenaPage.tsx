@@ -103,6 +103,7 @@ function AIAvatar({ name, size = 24 }: { name: string; size?: number }) {
     grok: { bg: 'bg-gray-700', text: 'text-white', letter: 'X' },
     kimi: { bg: 'bg-purple-500', text: 'text-white', letter: 'K' },
     minimax: { bg: 'bg-orange-500', text: 'text-white', letter: 'M' },
+    openclaw: { bg: 'bg-sky-500', text: 'text-white', letter: 'O' },
     qwen: { bg: 'bg-indigo-500', text: 'text-white', letter: 'Q' },
     openai: { bg: 'bg-emerald-600', text: 'text-white', letter: 'O' },
     gpt: { bg: 'bg-emerald-600', text: 'text-white', letter: 'O' },

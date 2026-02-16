@@ -26,6 +26,7 @@ type AIModel struct {
 	APIKey          crypto.EncryptedString `gorm:"column:api_key;default:''" json:"apiKey"`
 	CustomAPIURL    string                 `gorm:"column:custom_api_url;default:''" json:"customApiUrl"`
 	CustomModelName string                 `gorm:"column:custom_model_name;default:''" json:"customModelName"`
+	WebhookSecret   crypto.EncryptedString `gorm:"column:webhook_secret;default:''" json:"webhookSecret"`
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`
 }
@@ -43,6 +44,9 @@ func (s *AIModelStore) initTables() error {
 		var tableExists int64
 		s.db.Raw(`SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'ai_models'`).Scan(&tableExists)
 		if tableExists > 0 {
+			if err := s.db.Exec(`ALTER TABLE ai_models ADD COLUMN IF NOT EXISTS webhook_secret TEXT DEFAULT ''`).Error; err != nil {
+				return fmt.Errorf("failed to add webhook_secret column to ai_models: %w", err)
+			}
 			return nil
 		}
 	}
@@ -139,7 +143,7 @@ func (s *AIModelStore) firstEnabled(userID string) (*AIModel, error) {
 
 // Update updates AI model, creates if not exists
 // IMPORTANT: If apiKey is empty string, the existing API key will be preserved (not overwritten)
-func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPIURL, customModelName string) error {
+func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPIURL, customModelName, webhookSecret string) error {
 	// Try exact ID match first
 	var existingModel AIModel
 	err := s.db.Where("user_id = ? AND id = ?", userID, id).First(&existingModel).Error
@@ -154,6 +158,9 @@ func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPI
 		// If apiKey is not empty, update it (encryption handled by crypto.EncryptedString)
 		if apiKey != "" {
 			updates["api_key"] = crypto.EncryptedString(apiKey)
+		}
+		if webhookSecret != "" {
+			updates["webhook_secret"] = crypto.EncryptedString(webhookSecret)
 		}
 		return s.db.Model(&existingModel).Updates(updates).Error
 	}
@@ -171,6 +178,9 @@ func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPI
 		}
 		if apiKey != "" {
 			updates["api_key"] = crypto.EncryptedString(apiKey)
+		}
+		if webhookSecret != "" {
+			updates["webhook_secret"] = crypto.EncryptedString(webhookSecret)
 		}
 		return s.db.Model(&existingModel).Updates(updates).Error
 	}
@@ -199,6 +209,8 @@ func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPI
 			name = "Qwen AI"
 		} else if provider == "minimax" {
 			name = "MiniMax AI"
+		} else if provider == "openclaw" {
+			name = "OpenClaw AI"
 		} else {
 			name = provider + " AI"
 		}
@@ -219,6 +231,7 @@ func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPI
 		APIKey:          crypto.EncryptedString(apiKey),
 		CustomAPIURL:    customAPIURL,
 		CustomModelName: customModelName,
+		WebhookSecret:   crypto.EncryptedString(webhookSecret),
 	}
 	return s.db.Create(newModel).Error
 }
@@ -236,4 +249,40 @@ func (s *AIModelStore) Create(userID, id, name, provider string, enabled bool, a
 	}
 	// Use FirstOrCreate to ignore if already exists
 	return s.db.Where("id = ?", id).FirstOrCreate(model).Error
+}
+
+// GetProviderWebhookSecret retrieves the webhook secret configured for a provider.
+// User-level config takes precedence; default user acts as fallback.
+func (s *AIModelStore) GetProviderWebhookSecret(userID, provider string) (string, error) {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == "" {
+		return "", fmt.Errorf("provider cannot be empty")
+	}
+
+	candidates := []string{}
+	if userID != "" {
+		candidates = append(candidates, userID)
+	}
+	if userID != "default" {
+		candidates = append(candidates, "default")
+	}
+	if len(candidates) == 0 {
+		candidates = append(candidates, "default")
+	}
+
+	for _, uid := range candidates {
+		var model AIModel
+		err := s.db.
+			Where("user_id = ? AND provider = ? AND webhook_secret <> ''", uid, provider).
+			Order("updated_at DESC, id ASC").
+			First(&model).Error
+		if err == nil {
+			return strings.TrimSpace(string(model.WebhookSecret)), nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", err
+		}
+	}
+
+	return "", gorm.ErrRecordNotFound
 }
