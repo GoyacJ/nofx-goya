@@ -1,13 +1,12 @@
 package backtest
 
 import (
-	"strings"
 	"testing"
 
 	"nofx/mcp"
 )
 
-func TestConfigureMCPClient_MiniMaxRequiresBaseURLAndModel(t *testing.T) {
+func TestConfigureMCPClient_MiniMaxUsesDefaultsWhenBaseURLAndModelMissing(t *testing.T) {
 	cfg := BacktestConfig{
 		AICfg: AIConfig{
 			Provider: "minimax",
@@ -15,12 +14,20 @@ func TestConfigureMCPClient_MiniMaxRequiresBaseURLAndModel(t *testing.T) {
 		},
 	}
 
-	_, err := configureMCPClient(cfg, mcp.NewClient())
-	if err == nil {
-		t.Fatalf("expected minimax validation error")
+	client, err := configureMCPClient(cfg, mcp.NewClient())
+	if err != nil {
+		t.Fatalf("expected minimax client creation success, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "requires api key, base_url and model") {
-		t.Fatalf("unexpected error: %v", err)
+
+	mmClient, ok := client.(*mcp.MiniMaxClient)
+	if !ok {
+		t.Fatalf("expected *mcp.MiniMaxClient, got %T", client)
+	}
+	if mmClient.BaseURL != mcp.DefaultMiniMaxBaseURL {
+		t.Fatalf("expected default base URL %q, got %q", mcp.DefaultMiniMaxBaseURL, mmClient.BaseURL)
+	}
+	if mmClient.Model != mcp.DefaultMiniMaxModel {
+		t.Fatalf("expected default model %q, got %q", mcp.DefaultMiniMaxModel, mmClient.Model)
 	}
 }
 

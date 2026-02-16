@@ -14,6 +14,7 @@ import (
 	"nofx/logger"
 	"nofx/manager"
 	"nofx/market"
+	"nofx/mcp"
 	"nofx/provider/alpaca"
 	"nofx/provider/coinank/coinank_api"
 	"nofx/provider/coinank/coinank_enum"
@@ -1728,7 +1729,7 @@ func buildSupportedModels() []map[string]interface{} {
 		{"id": "gemini", "name": "Google Gemini", "provider": "gemini", "defaultModel": "gemini-3-pro-preview"},
 		{"id": "grok", "name": "Grok (xAI)", "provider": "grok", "defaultModel": "grok-3-latest"},
 		{"id": "kimi", "name": "Kimi (Moonshot)", "provider": "kimi", "defaultModel": "moonshot-v1-auto"},
-		{"id": "minimax", "name": "MiniMax", "provider": "minimax", "defaultModel": ""},
+		{"id": "minimax", "name": "MiniMax", "provider": "minimax", "defaultModel": mcp.DefaultMiniMaxModel},
 	}
 }
 
@@ -1782,8 +1783,15 @@ func validateModelConfigUpdate(modelKey string, modelData ModelUpdateConfig, exi
 		}
 	}
 
+	if finalBaseURL == "" {
+		finalBaseURL = mcp.DefaultMiniMaxBaseURL
+	}
+	if finalModelName == "" {
+		finalModelName = mcp.DefaultMiniMaxModel
+	}
+
 	if finalBaseURL == "" || finalModelName == "" {
-		return fmt.Errorf("MiniMax requires explicit custom_api_url and custom_model_name when enabled")
+		return fmt.Errorf("MiniMax requires valid base URL and model")
 	}
 
 	return nil

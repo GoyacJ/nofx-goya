@@ -602,12 +602,6 @@ func (s *Server) runRealAITest(userID, modelID, systemPrompt, userPrompt string)
 	var aiClient mcp.AIClient
 	provider := strings.ToLower(strings.TrimSpace(model.Provider))
 
-	if provider == "minimax" {
-		if strings.TrimSpace(model.CustomAPIURL) == "" || strings.TrimSpace(model.CustomModelName) == "" {
-			return "", fmt.Errorf("MiniMax requires custom_api_url and custom_model_name")
-		}
-	}
-
 	// Convert EncryptedString to string for API key
 	apiKey := string(model.APIKey)
 	switch provider {

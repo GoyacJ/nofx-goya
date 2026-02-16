@@ -72,8 +72,8 @@ func configureMCPClient(cfg BacktestConfig, base mcp.AIClient) (mcp.AIClient, er
 		oaiC.(*mcp.OpenAIClient).SetAPIKey(cfg.AICfg.APIKey, cfg.AICfg.BaseURL, cfg.AICfg.Model)
 		return oaiC, nil
 	case "minimax":
-		if cfg.AICfg.APIKey == "" || cfg.AICfg.BaseURL == "" || cfg.AICfg.Model == "" {
-			return nil, fmt.Errorf("minimax provider requires api key, base_url and model")
+		if cfg.AICfg.APIKey == "" {
+			return nil, fmt.Errorf("minimax provider requires api key")
 		}
 		mmC := mcp.NewMiniMaxClientWithOptions()
 		mmC.(*mcp.MiniMaxClient).SetAPIKey(cfg.AICfg.APIKey, cfg.AICfg.BaseURL, cfg.AICfg.Model)

@@ -5,7 +5,9 @@ import (
 )
 
 const (
-	ProviderMiniMax = "minimax"
+	ProviderMiniMax       = "minimax"
+	DefaultMiniMaxBaseURL = "https://api.minimaxi.com/v1"
+	DefaultMiniMaxModel   = "MiniMax-M2.5"
 )
 
 type MiniMaxClient struct {
@@ -19,11 +21,12 @@ func NewMiniMaxClient() AIClient {
 
 // NewMiniMaxClientWithOptions creates MiniMax client (supports options pattern).
 //
-// Note: MiniMax defaults are intentionally left empty. Users must explicitly
-// configure BaseURL and Model when enabling this provider.
+// Default endpoint/model follow MiniMax OpenAI-compatible quickstart.
 func NewMiniMaxClientWithOptions(opts ...ClientOption) AIClient {
 	miniMaxOpts := []ClientOption{
 		WithProvider(ProviderMiniMax),
+		WithBaseURL(DefaultMiniMaxBaseURL),
+		WithModel(DefaultMiniMaxModel),
 	}
 
 	allOpts := append(miniMaxOpts, opts...)
@@ -47,15 +50,15 @@ func (c *MiniMaxClient) SetAPIKey(apiKey string, customURL string, customModel s
 		c.BaseURL = customURL
 		c.logger.Infof("🔧 [MCP] MiniMax using custom BaseURL: %s", customURL)
 	} else {
-		c.BaseURL = ""
-		c.logger.Infof("🔧 [MCP] MiniMax has no default BaseURL, please configure custom BaseURL")
+		c.BaseURL = DefaultMiniMaxBaseURL
+		c.logger.Infof("🔧 [MCP] MiniMax using default BaseURL: %s", c.BaseURL)
 	}
 	if customModel != "" {
 		c.Model = customModel
 		c.logger.Infof("🔧 [MCP] MiniMax using custom Model: %s", customModel)
 	} else {
-		c.Model = ""
-		c.logger.Infof("🔧 [MCP] MiniMax has no default Model, please configure custom Model")
+		c.Model = DefaultMiniMaxModel
+		c.logger.Infof("🔧 [MCP] MiniMax using default Model: %s", c.Model)
 	}
 }
 

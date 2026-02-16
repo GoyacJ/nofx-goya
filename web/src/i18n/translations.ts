@@ -583,7 +583,7 @@ export const translations = {
     kimiApiNote:
       'Kimi requires API Key from international site (moonshot.ai), China region keys are not compatible',
     minimaxApiNote:
-      'MiniMax has no built-in defaults. Please fill both Base URL and Model Name explicitly before saving.',
+      'MiniMax defaults to https://api.minimaxi.com/v1 and model MiniMax-M2.5. Fill Base URL / Model Name only when overriding.',
     leaveBlankForDefaultModel: 'Leave blank to use default model',
     customModelName: 'Model Name (Optional)',
     customModelNamePlaceholder: 'e.g.: deepseek-chat, qwen3-max, gpt-4o',
@@ -1808,7 +1808,7 @@ export const translations = {
     kimiApiNote:
       'Kimi 需要从国际站申请 API Key (moonshot.ai)，中国区 Key 不通用',
     minimaxApiNote:
-      'MiniMax 不提供内置默认值，保存前必须显式填写 Base URL 和 Model Name。',
+      'MiniMax 默认使用 https://api.minimaxi.com/v1 和模型 MiniMax-M2.5，只有需要覆盖默认值时才填写 Base URL / Model Name。',
     leaveBlankForDefaultModel: '留空使用默认模型名称',
     customModelName: 'Model Name (可选)',
     customModelNamePlaceholder: '例如: deepseek-chat, qwen3-max, gpt-4o',

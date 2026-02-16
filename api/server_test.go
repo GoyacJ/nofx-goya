@@ -8,6 +8,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"nofx/mcp"
 	"nofx/store"
 
 	"github.com/gin-gonic/gin"
@@ -560,8 +561,8 @@ func TestBuildSupportedModels_IncludesMiniMax(t *testing.T) {
 	for _, model := range models {
 		if model["provider"] == "minimax" {
 			found = true
-			if model["defaultModel"] != "" {
-				t.Fatalf("expected minimax default model to be empty, got %v", model["defaultModel"])
+			if model["defaultModel"] != mcp.DefaultMiniMaxModel {
+				t.Fatalf("expected minimax default model %q, got %v", mcp.DefaultMiniMaxModel, model["defaultModel"])
 			}
 			break
 		}
@@ -572,8 +573,8 @@ func TestBuildSupportedModels_IncludesMiniMax(t *testing.T) {
 }
 
 func TestValidateModelConfigUpdate_MiniMaxRules(t *testing.T) {
-	if err := validateModelConfigUpdate("minimax", ModelUpdateConfig{Enabled: true}, nil); err == nil {
-		t.Fatalf("expected minimax validation error when base URL/model are missing")
+	if err := validateModelConfigUpdate("minimax", ModelUpdateConfig{Enabled: true}, nil); err != nil {
+		t.Fatalf("expected minimax validation to pass with defaults, got %v", err)
 	}
 
 	if err := validateModelConfigUpdate("minimax", ModelUpdateConfig{

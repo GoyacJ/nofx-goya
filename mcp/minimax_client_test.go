@@ -12,11 +12,11 @@ func TestNewMiniMaxClient_Default(t *testing.T) {
 	if mc.Provider != ProviderMiniMax {
 		t.Fatalf("expected provider %q, got %q", ProviderMiniMax, mc.Provider)
 	}
-	if mc.BaseURL != "" {
-		t.Fatalf("expected empty base URL by default, got %q", mc.BaseURL)
+	if mc.BaseURL != DefaultMiniMaxBaseURL {
+		t.Fatalf("expected default base URL %q, got %q", DefaultMiniMaxBaseURL, mc.BaseURL)
 	}
-	if mc.Model != "" {
-		t.Fatalf("expected empty model by default, got %q", mc.Model)
+	if mc.Model != DefaultMiniMaxModel {
+		t.Fatalf("expected default model %q, got %q", DefaultMiniMaxModel, mc.Model)
 	}
 }
 

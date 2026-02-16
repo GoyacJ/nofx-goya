@@ -99,7 +99,7 @@
 | **Gemini** | ✅ 已支持 | [获取 API Key](https://aistudio.google.com) |
 | **Grok** | ✅ 已支持 | [获取 API Key](https://console.x.ai) |
 | **Kimi** | ✅ 已支持 | [获取 API Key](https://platform.moonshot.cn) |
-| **MiniMax** | ✅ 已支持 | 需手动配置 Base URL 与 Model Name |
+| **MiniMax** | ✅ 已支持 | 默认 `https://api.minimaxi.com/v1`（`MiniMax-M2.5`） |
 
 ---
 

@@ -90,9 +90,6 @@ func (e *DebateEngine) InitializeClients(participants []*store.DebateParticipant
 		case "openai":
 			client = mcp.NewOpenAIClient()
 		case "minimax":
-			if strings.TrimSpace(aiModel.CustomAPIURL) == "" || strings.TrimSpace(aiModel.CustomModelName) == "" {
-				return fmt.Errorf("MiniMax model %s requires custom_api_url and custom_model_name", aiModel.Name)
-			}
 			client = mcp.NewMiniMaxClient()
 		case "claude":
 			client = mcp.NewClaudeClient()
