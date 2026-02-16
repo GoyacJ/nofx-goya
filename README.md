@@ -156,7 +156,7 @@ To use NOFX, you'll need:
 curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
 ```
 
-That's it! Open **http://127.0.0.1:3000** in your browser.
+That's it! Open **http://127.0.0.1:8080** in your browser.
 
 ### One-Click Cloud Deploy (Railway)
 
@@ -174,7 +174,7 @@ curl -O https://raw.githubusercontent.com/NoFxAiOS/nofx/main/docker-compose.prod
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Access Web Interface: **http://127.0.0.1:3000**
+Access Web Interface: **http://127.0.0.1:8080**
 
 ```bash
 # Management commands
@@ -221,21 +221,15 @@ cd nofx
 # 2. Install backend dependencies
 go mod download
 
-# 3. Install frontend dependencies
-cd web
-npm install
-cd ..
+# 3. Build standalone binary (frontend build + go build embed)
+./scripts/build-standalone.sh
 
-# 4. Build and start backend
-go build -o nofx
+# 4. Start NOFX (single process)
 ./nofx
-
-# 5. Start frontend (new terminal)
-cd web
-npm run dev
+# or: make run
 ```
 
-Access Web Interface: **http://127.0.0.1:3000**
+Access Web Interface: **http://127.0.0.1:8080**
 
 ---
 
@@ -255,7 +249,7 @@ Access Web Interface: **http://127.0.0.1:3000**
    docker compose -f docker-compose.prod.yml up -d
    ```
 
-3. **Access**: Open **http://127.0.0.1:3000** in your browser
+3. **Access**: Open **http://127.0.0.1:8080** in your browser
 
 ### Method 2: WSL2 (For Development)
 
@@ -298,14 +292,12 @@ Access Web Interface: **http://127.0.0.1:3000**
    git clone https://github.com/NoFxAiOS/nofx.git
    cd nofx
 
-   # Build and run backend
-   go build -o nofx && ./nofx
-
-   # In another terminal, run frontend
-   cd web && npm install && npm run dev
+   # Build and run standalone NOFX
+   ./scripts/build-standalone.sh
+   ./nofx
    ```
 
-5. **Access**: Open **http://127.0.0.1:3000** in Windows browser
+5. **Access**: Open **http://127.0.0.1:8080** in Windows browser
 
 ### Method 3: Docker in WSL2 (Best of Both Worlds)
 
@@ -331,7 +323,7 @@ By default, transport encryption is **disabled**, allowing you to access NOFX vi
 curl -fsSL https://raw.githubusercontent.com/NoFxAiOS/nofx/main/install.sh | bash
 ```
 
-Access via `http://YOUR_SERVER_IP:3000` - works immediately.
+Access via `http://YOUR_SERVER_IP:8080` - works immediately.
 
 ### Enhanced Security (HTTPS)
 
@@ -362,7 +354,7 @@ When enabled, browser uses Web Crypto API to encrypt API keys before transmissio
    - Set encryption mode to **Flexible**
 
    ```
-   User ──[HTTPS]──→ Cloudflare ──[HTTP]──→ Your Server:3000
+   User ──[HTTPS]──→ Cloudflare ──[HTTP]──→ Your Server:8080
    ```
 
 4. **Enable transport encryption**
@@ -440,9 +432,10 @@ sudo apt-get install libta-lib0-dev
 - Check network connection
 - System timeout is 120 seconds
 
-### Frontend can't connect to backend
+### Web UI can't load
 - Ensure backend is running on http://localhost:8080
-- Check if port is occupied
+- If you build from source, run `./scripts/build-standalone.sh` before `go build` or `go run`
+- Check if port 8080 is occupied
 
 ---
 

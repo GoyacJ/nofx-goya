@@ -2,10 +2,15 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"nofx/store"
+
+	"github.com/gin-gonic/gin"
 )
 
 // TestUpdateTraderRequest_SystemPromptTemplate Test whether SystemPromptTemplate field exists when updating trader
@@ -391,5 +396,146 @@ func TestSafeExchangeConfig_QMTTokenExcluded(t *testing.T) {
 	jsonStr := string(data)
 	if strings.Contains(jsonStr, "qmt_gateway_token") || strings.Contains(jsonStr, "qmtGatewayToken") {
 		t.Fatalf("safe config should not expose qmt token, got: %s", jsonStr)
+	}
+}
+
+func newWebRouteTestServer(webFS fstest.MapFS) *Server {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	s := &Server{
+		router: router,
+		webFS:  webFS,
+	}
+
+	router.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	s.setupWebRoutes()
+	return s
+}
+
+func TestWebRoutes_IndexAndSPAFallback(t *testing.T) {
+	webFS := fstest.MapFS{
+		"index.html": {
+			Data: []byte("<html><body>NOFX UI</body></html>"),
+		},
+		"assets/app.js": {
+			Data: []byte("console.log('nofx');"),
+		},
+	}
+	server := newWebRouteTestServer(webFS)
+
+	t.Run("GET / returns index.html", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		server.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "NOFX UI") {
+			t.Fatalf("expected index content, got: %s", rec.Body.String())
+		}
+		if cache := rec.Header().Get("Cache-Control"); cache != "no-cache" {
+			t.Fatalf("expected no-cache for index, got %q", cache)
+		}
+	})
+
+	t.Run("GET /dashboard falls back to index.html", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+		rec := httptest.NewRecorder()
+		server.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "NOFX UI") {
+			t.Fatalf("expected SPA fallback index content, got: %s", rec.Body.String())
+		}
+		if cache := rec.Header().Get("Cache-Control"); cache != "no-cache" {
+			t.Fatalf("expected no-cache for SPA fallback, got %q", cache)
+		}
+	})
+
+	t.Run("GET /assets/<hashed>.js returns static file with cache header", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
+		rec := httptest.NewRecorder()
+		server.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "console.log('nofx')") {
+			t.Fatalf("expected static asset content, got: %s", rec.Body.String())
+		}
+		if cache := rec.Header().Get("Cache-Control"); cache != "public, max-age=31536000, immutable" {
+			t.Fatalf("unexpected cache header: %q", cache)
+		}
+	})
+}
+
+func TestWebRoutes_APIPriorityAndMethodRules(t *testing.T) {
+	webFS := fstest.MapFS{
+		"index.html": {
+			Data: []byte("<html><body>NOFX UI</body></html>"),
+		},
+	}
+	server := newWebRouteTestServer(webFS)
+
+	t.Run("GET /api/health returns API health", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+		rec := httptest.NewRecorder()
+		server.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), `"status":"ok"`) {
+			t.Fatalf("expected API health JSON, got: %s", rec.Body.String())
+		}
+	})
+
+	t.Run("GET /api/non-exist returns 404 and never falls back to index", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/non-exist", nil)
+		rec := httptest.NewRecorder()
+		server.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "NOFX UI") {
+			t.Fatalf("api route should not fallback to index, body: %s", rec.Body.String())
+		}
+	})
+
+	t.Run("POST /dashboard returns 404 (no SPA fallback for non-GET/HEAD)", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/dashboard", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		server.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", rec.Code)
+		}
+	})
+}
+
+func TestSimpleHealthRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	s := &Server{router: router}
+	router.GET("/health", s.handleSimpleHealth)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if strings.TrimSpace(rec.Body.String()) != "ok" {
+		t.Fatalf("expected body 'ok', got %q", rec.Body.String())
 	}
 }

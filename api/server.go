@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"nofx/auth"
@@ -30,6 +31,7 @@ import (
 	"nofx/trader/lighter"
 	"nofx/trader/okx"
 	qmttrader "nofx/trader/qmt"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -48,10 +50,11 @@ type Server struct {
 	debateHandler   *DebateHandler
 	httpServer      *http.Server
 	port            int
+	webFS           fs.FS
 }
 
 // NewServer Creates API server
-func NewServer(traderManager *manager.TraderManager, st *store.Store, cryptoService *crypto.CryptoService, backtestManager *backtest.Manager, port int) *Server {
+func NewServer(traderManager *manager.TraderManager, st *store.Store, cryptoService *crypto.CryptoService, backtestManager *backtest.Manager, port int, webFS fs.FS) *Server {
 	// Set to Release mode (reduce log output)
 	gin.SetMode(gin.ReleaseMode)
 
@@ -79,6 +82,7 @@ func NewServer(traderManager *manager.TraderManager, st *store.Store, cryptoServ
 		backtestManager: backtestManager,
 		debateHandler:   debateHandler,
 		port:            port,
+		webFS:           webFS,
 	}
 
 	// Setup routes
@@ -105,6 +109,8 @@ func corsMiddleware() gin.HandlerFunc {
 
 // setupRoutes Setup routes
 func (s *Server) setupRoutes() {
+	s.router.GET("/health", s.handleSimpleHealth)
+
 	// API route group
 	api := s.router.Group("/api")
 	{
@@ -225,6 +231,107 @@ func (s *Server) setupRoutes() {
 			s.registerBacktestRoutes(backtest)
 		}
 	}
+
+	s.setupWebRoutes()
+}
+
+func (s *Server) setupWebRoutes() {
+	if s.webFS == nil {
+		logger.Warn("embedded web filesystem is not configured, web routes are disabled")
+		return
+	}
+
+	fileServer := http.FileServer(http.FS(s.webFS))
+
+	s.router.NoRoute(func(c *gin.Context) {
+		requestPath := c.Request.URL.Path
+
+		// /api/* never falls back to SPA index.html.
+		if requestPath == "/api" || strings.HasPrefix(requestPath, "/api/") {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
+		// Only GET/HEAD can be served by static files or SPA fallback.
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
+		assetPath, ok := normalizeWebAssetPath(requestPath)
+		if !ok {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
+		if assetPath != "index.html" && webFileExists(s.webFS, assetPath) {
+			setWebCacheHeaders(c, requestPath, false)
+			c.Request.URL.Path = "/" + assetPath
+			fileServer.ServeHTTP(c.Writer, c.Request)
+			return
+		}
+
+		// SPA fallback for unknown frontend routes (e.g. /dashboard).
+		setWebCacheHeaders(c, "/index.html", true)
+		if err := serveEmbeddedIndex(c, s.webFS); err != nil {
+			logger.Errorf("failed to serve embedded index.html: %v", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+	})
+}
+
+func normalizeWebAssetPath(requestPath string) (string, bool) {
+	if requestPath == "" || requestPath == "/" {
+		return "index.html", true
+	}
+
+	clean := path.Clean("/" + requestPath)
+	if clean == "/.." || strings.HasPrefix(clean, "/../") {
+		return "", false
+	}
+
+	clean = strings.TrimPrefix(clean, "/")
+	if clean == "" || clean == "." {
+		return "index.html", true
+	}
+
+	return clean, true
+}
+
+func webFileExists(webFS fs.FS, assetPath string) bool {
+	info, err := fs.Stat(webFS, assetPath)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
+}
+
+func serveEmbeddedIndex(c *gin.Context, webFS fs.FS) error {
+	indexBytes, err := fs.ReadFile(webFS, "index.html")
+	if err != nil {
+		return err
+	}
+	c.Data(http.StatusOK, "text/html; charset=utf-8", indexBytes)
+	return nil
+}
+
+func setWebCacheHeaders(c *gin.Context, requestPath string, isIndex bool) {
+	if isIndex || strings.HasSuffix(requestPath, "/index.html") {
+		c.Header("Cache-Control", "no-cache")
+		return
+	}
+
+	if strings.HasPrefix(requestPath, "/assets/") ||
+		strings.HasPrefix(requestPath, "/icons/") ||
+		strings.HasPrefix(requestPath, "/images/") ||
+		strings.HasPrefix(requestPath, "/exchange-icons/") {
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	}
+}
+
+func (s *Server) handleSimpleHealth(c *gin.Context) {
+	c.String(http.StatusOK, "ok")
 }
 
 // handleHealth Health check
@@ -3465,9 +3572,10 @@ func (s *Server) handleGetSupportedExchanges(c *gin.Context) {
 // Start Start server
 func (s *Server) Start() error {
 	addr := fmt.Sprintf(":%d", s.port)
-	logger.Infof("🌐 API server starting at http://localhost%s", addr)
+	logger.Infof("🌐 NOFX server starting at http://localhost%s", addr)
 	logger.Infof("📊 API Documentation:")
-	logger.Infof("  • GET  /api/health           - Health check")
+	logger.Infof("  • GET  /health               - Health check (simple)")
+	logger.Infof("  • GET  /api/health           - Health check (api)")
 	logger.Infof("  • GET  /api/traders          - Public AI trader leaderboard top 50 (no auth required)")
 	logger.Infof("  • GET  /api/competition      - Public competition data (no auth required)")
 	logger.Infof("  • GET  /api/top-traders      - Top 5 trader data (no auth required, for performance comparison)")

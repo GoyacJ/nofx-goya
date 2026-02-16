@@ -1,6 +1,6 @@
 name: PR Docker Compose Healthcheck
 
-# 驗證 docker-compose.yml 的 healthcheck 配置在 Alpine 容器中正常工作
+# Verify docker-compose.yml single-container healthcheck works on Alpine
 on:
   pull_request:
     branches:
@@ -9,14 +9,13 @@ on:
     paths:
       - 'docker-compose.yml'
       - 'docker/Dockerfile.backend'
-      - 'docker/Dockerfile.frontend'
       - '.github/workflows/pr-docker-compose-healthcheck.yml'
 
 jobs:
   healthcheck-test:
     name: Test Docker Compose Healthcheck
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 12
     permissions:
       contents: read
 
@@ -26,45 +25,39 @@ jobs:
 
       - name: Create minimal .env for testing
         run: |
-          cat > .env <<EOF
+          JWT_SECRET="test-jwt-secret-123456789012345678901234"
+          DATA_ENCRYPTION_KEY=$(openssl rand -base64 32)
+          RSA_PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null | tr '\n' '\\' | sed 's/\\/\\n/g' | sed 's/\\n$//')
+
+          cat > .env <<EOF_ENV
           # Minimal config for healthcheck testing
           NOFX_BACKEND_PORT=8080
-          NOFX_FRONTEND_PORT=3000
-          NOFX_TIMEZONE=UTC
-          DATA_ENCRYPTION_KEY=test-key-32-chars-minimum-length
-          JWT_SECRET=test-jwt-secret-minimum-32-chars
-          EOF
+          TZ=UTC
+          JWT_SECRET=${JWT_SECRET}
+          DATA_ENCRYPTION_KEY=${DATA_ENCRYPTION_KEY}
+          RSA_PRIVATE_KEY=${RSA_PRIVATE_KEY}
+          EOF_ENV
 
-      - name: Create minimal config.json
-        run: |
-          cat > config.json <<EOF
-          {
-            "ai_models": [],
-            "exchanges": [],
-            "traders": []
-          }
-          EOF
-
-      - name: Start services with docker compose
+      - name: Start standalone service with docker compose
         run: |
           docker compose up -d
-          echo "✅ Services started, waiting for healthcheck..."
+          echo "✅ Service started, waiting for healthcheck..."
 
       - name: Wait for healthcheck start_period
         run: |
           echo "⏳ Waiting 70 seconds for healthcheck start_period to complete..."
           sleep 70
 
-      - name: Verify backend healthcheck
+      - name: Verify container healthcheck status
         run: |
-          echo "🔍 Checking backend container health..."
+          echo "🔍 Checking container health..."
 
-          BACKEND_HEALTH=$(docker inspect nofx-trading --format='{{.State.Health.Status}}')
-          echo "Backend health status: $BACKEND_HEALTH"
+          HEALTH=$(docker inspect nofx-trading --format='{{.State.Health.Status}}')
+          echo "Health status: $HEALTH"
 
-          if [ "$BACKEND_HEALTH" != "healthy" ]; then
-            echo "❌ Backend container is not healthy!"
-            echo "Health status: $BACKEND_HEALTH"
+          if [ "$HEALTH" != "healthy" ]; then
+            echo "❌ Container is not healthy!"
+            echo "Health status: $HEALTH"
             echo ""
             echo "Health logs:"
             docker inspect nofx-trading --format='{{json .State.Health}}' | jq
@@ -74,39 +67,25 @@ jobs:
             exit 1
           fi
 
-          echo "✅ Backend container is healthy"
+          echo "✅ Container is healthy"
 
-      - name: Verify frontend healthcheck
+      - name: Verify /api/health and /health endpoints
         run: |
-          echo "🔍 Checking frontend container health..."
+          echo "🧪 Testing health endpoints..."
 
-          FRONTEND_HEALTH=$(docker inspect nofx-frontend --format='{{.State.Health.Status}}')
-          echo "Frontend health status: $FRONTEND_HEALTH"
+          curl -sf http://127.0.0.1:8080/api/health >/dev/null
+          echo "✅ /api/health works"
 
-          if [ "$FRONTEND_HEALTH" != "healthy" ]; then
-            echo "❌ Frontend container is not healthy!"
-            echo "Health status: $FRONTEND_HEALTH"
-            echo ""
-            echo "Health logs:"
-            docker inspect nofx-frontend --format='{{json .State.Health}}' | jq
-            echo ""
-            echo "Container logs:"
-            docker logs nofx-frontend
-            exit 1
-          fi
+          curl -sf http://127.0.0.1:8080/health >/dev/null
+          echo "✅ /health works"
 
-          echo "✅ Frontend container is healthy"
-
-      - name: Verify healthcheck commands are Alpine-compatible
+      - name: Verify healthcheck command is Alpine-compatible
         run: |
-          echo "🔍 Verifying healthcheck commands use Alpine-compatible tools..."
+          echo "🔍 Verifying healthcheck command uses Alpine-compatible tool..."
 
-          # Check that docker-compose.yml uses wget (not curl)
           if grep -q 'test:.*curl' docker-compose.yml; then
-            echo "❌ ERROR: docker-compose.yml uses 'curl' which doesn't exist in Alpine!"
-            echo ""
-            echo "Alpine Linux (used by our containers) includes 'wget' but not 'curl'."
-            echo "Please use 'wget --no-verbose --tries=1 --spider' instead."
+            echo "❌ ERROR: docker-compose.yml uses 'curl' which may not exist in Alpine"
+            echo "Please use 'wget --no-verbose --tries=1 --spider'"
             exit 1
           fi
 
@@ -116,19 +95,11 @@ jobs:
             echo "✅ Healthcheck uses Alpine-compatible 'wget' command"
           fi
 
-      - name: Test healthcheck commands inside containers
+      - name: Test healthcheck command inside container
         run: |
-          echo "🧪 Testing healthcheck commands directly..."
-
-          # Test backend healthcheck command
-          echo "Testing backend healthcheck..."
-          docker exec nofx-trading wget --no-verbose --tries=1 --spider http://localhost:8080/api/health
-          echo "✅ Backend healthcheck command works"
-
-          # Test frontend healthcheck command
-          echo "Testing frontend healthcheck..."
-          docker exec nofx-frontend wget --no-verbose --tries=1 --spider http://127.0.0.1/health
-          echo "✅ Frontend healthcheck command works"
+          echo "🧪 Testing healthcheck command directly..."
+          docker exec nofx-trading wget --no-verbose --tries=1 --spider http://localhost:8080/health
+          echo "✅ Healthcheck command works"
 
       - name: Show container status
         if: always()
@@ -139,14 +110,11 @@ jobs:
       - name: Show logs on failure
         if: failure()
         run: |
-          echo "📋 Backend logs:"
+          echo "📋 Container logs:"
           docker logs nofx-trading
-          echo ""
-          echo "📋 Frontend logs:"
-          docker logs nofx-frontend
 
       - name: Cleanup
         if: always()
         run: |
           docker compose down -v
-          rm -f .env config.json
+          rm -f .env

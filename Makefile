@@ -1,6 +1,6 @@
 # NOFX Makefile for testing and development
 
-.PHONY: help test test-backend test-frontend test-coverage clean
+.PHONY: help test test-backend test-frontend test-coverage build build-backend-only build-frontend run run-frontend fmt lint clean docker-build docker-up docker-down docker-logs deps deps-update deps-frontend
 
 # Default target
 help:
@@ -13,8 +13,9 @@ help:
 	@echo "  make test-coverage        - Generate backend coverage report"
 	@echo ""
 	@echo "Build:"
-	@echo "  make build                - Build backend binary"
+	@echo "  make build                - Build standalone binary (embed frontend)"
 	@echo "  make build-frontend       - Build frontend"
+	@echo "  make build-backend-only   - Build backend binary only (without prebuild script)"
 	@echo ""
 	@echo "Clean:"
 	@echo "  make clean                - Clean build artifacts and test cache"
@@ -53,10 +54,16 @@ test-coverage:
 # Build
 # =============================================================================
 
-# Build backend binary
+# Build standalone binary (frontend build + go build with embed)
 build:
-	@echo "🔨 Building backend..."
-	go build -o nofx
+	@echo "🔨 Building standalone NOFX..."
+	./scripts/build-standalone.sh
+	@echo "✅ Standalone build completed: ./nofx"
+
+# Build backend binary only (for internal use)
+build-backend-only:
+	@echo "🔨 Building backend only..."
+	go build -o nofx .
 	@echo "✅ Backend built: ./nofx"
 
 # Build frontend
@@ -69,10 +76,10 @@ build-frontend:
 # Development
 # =============================================================================
 
-# Run backend in development mode
+# Run standalone NOFX (frontend prebuild + single process)
 run:
-	@echo "🚀 Starting backend..."
-	go run main.go
+	@echo "🚀 Starting standalone NOFX..."
+	./scripts/run-standalone.sh
 
 # Run frontend in development mode
 run-frontend:

@@ -181,6 +181,13 @@ jobs:
         with:
           go-version: '1.21'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -191,6 +198,11 @@ jobs:
 
       - name: Download dependencies
         run: go mod download
+
+      - name: Build frontend for go:embed
+        run: |
+          npm --prefix web ci
+          npm --prefix web run build
 
       - name: Run go fmt
         continue-on-error: true  # Don't block PR if formatting issues found

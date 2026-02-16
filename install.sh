@@ -17,6 +17,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Default installation directory
@@ -103,7 +104,6 @@ generate_env() {
 
 # Server ports
 NOFX_BACKEND_PORT=8080
-NOFX_FRONTEND_PORT=3000
 
 # Timezone
 TZ=Asia/Shanghai
@@ -243,8 +243,7 @@ print_success() {
     echo -e "║              🎉 Installation Complete! 🎉                   ║"
     echo -e "╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "  ${BLUE}Web Interface:${NC}  http://${SERVER_IP}:3000"
-    echo -e "  ${BLUE}API Endpoint:${NC}   http://${SERVER_IP}:8080"
+    echo -e "  ${BLUE}Web + API:${NC}      http://${SERVER_IP}:8080"
     echo -e "  ${BLUE}Install Dir:${NC}    $INSTALL_DIR"
     echo ""
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗"
@@ -264,13 +263,13 @@ print_success() {
     echo "  $COMPOSE_CMD pull && $COMPOSE_CMD up -d  # Update to latest"
     echo ""
     echo -e "${YELLOW}Next Steps:${NC}"
-    echo "  1. Open http://${SERVER_IP}:3000 in your browser"
+    echo "  1. Open http://${SERVER_IP}:8080 in your browser"
     echo "  2. Configure AI Models (DeepSeek, OpenAI, etc.)"
     echo "  3. Configure Exchanges (Binance, Hyperliquid, etc.)"
     echo "  4. Create a Strategy in Strategy Studio"
     echo "  5. Create a Trader and start trading!"
     echo ""
-    echo -e "${YELLOW}Note:${NC} If accessing from local machine, use http://127.0.0.1:3000"
+    echo -e "${YELLOW}Note:${NC} If accessing from local machine, use http://127.0.0.1:8080"
     echo ""
     echo -e "${RED}⚠️  Risk Warning: AI trading carries significant risks.${NC}"
     echo -e "${RED}   Only use funds you can afford to lose!${NC}"

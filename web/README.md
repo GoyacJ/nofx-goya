@@ -18,13 +18,23 @@
 npm install
 ```
 
-## 运行开发服务器
+## 默认启动（单进程）
+
+在项目根目录执行（会先构建前端，再启动 Go 单进程服务）：
+
+```bash
+./scripts/run-standalone.sh
+```
+
+访问 http://localhost:8080
+
+## 前端开发模式（仅调试）
 
 ```bash
 npm run dev
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:3000（Vite Dev Server）
 
 ## 构建生产版本
 
@@ -87,9 +97,10 @@ web/
 
 ## 注意事项
 
-1. **确保后端API服务已启动**（默认端口8080）
-2. **Node.js版本要求**：>= 18.0.0
-3. **网络连接**：需要访问Binance API
+1. **生产/默认运行模式为单进程**：通过根目录脚本启动，入口是 http://localhost:8080
+2. **前端开发模式需要后端先启动**（默认端口8080）
+3. **Node.js版本要求**：>= 18.0.0
+4. **网络连接**：需要访问Binance API
 
 ## 开发计划
 

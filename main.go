@@ -129,7 +129,12 @@ func main() {
 	}
 
 	// Start API server
-	server := api.NewServer(traderManager, st, cryptoService, backtestManager, cfg.APIServerPort)
+	webFS, err := getEmbeddedWebFS()
+	if err != nil {
+		logger.Fatalf("❌ Failed to load embedded web assets: %v", err)
+	}
+
+	server := api.NewServer(traderManager, st, cryptoService, backtestManager, cfg.APIServerPort, webFS)
 	go func() {
 		if err := server.Start(); err != nil {
 			logger.Fatalf("❌ Failed to start API server: %v", err)

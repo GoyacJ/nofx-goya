@@ -1,9 +1,8 @@
 # docker/backend/Dockerfile
 
 # ═══════════════════════════════════════════════════════════════
-# NOFX Backend Dockerfile (Go + TA-Lib)
-# Multi-stage build with shared TA-Lib compilation stage
-# Versions extracted as ARGs for maintainability
+# NOFX Standalone Dockerfile (Go + Embedded Frontend + TA-Lib)
+# Multi-stage build: TA-Lib -> frontend build -> Go build -> runtime
 # ═══════════════════════════════════════════════════════════════
 
 ARG GO_VERSION=1.25-alpine
@@ -34,11 +33,11 @@ RUN wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-${TA_LIB_VERSION}-src.
     cd .. && rm -rf ta-lib ta-lib-${TA_LIB_VERSION}-src.tar.gz
 
 # ──────────────────────────────────────────────────────────────
-# Backend Build Stage (Go Application)
+# Backend Build Stage (frontend build + Go application)
 # ──────────────────────────────────────────────────────────────
 FROM golang:${GO_VERSION} AS backend-builder
 
-RUN apk update && apk add --no-cache git make gcc g++ musl-dev
+RUN apk update && apk add --no-cache git make gcc g++ musl-dev nodejs npm
 
 COPY --from=ta-lib-builder /usr/local /usr/local
 
@@ -46,7 +45,16 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Cache frontend dependencies before full source copy
+COPY web/package.json web/package-lock.json ./web/
+RUN npm --prefix web ci
+
 COPY . .
+
+# Build frontend assets for go:embed
+RUN npm --prefix web run build
+
+# Build standalone binary with embedded web assets
 RUN CGO_ENABLED=1 GOOS=linux \
     CGO_CFLAGS="-D_LARGEFILE64_SOURCE" \
     go build -trimpath -ldflags="-s -w" -o nofx .
@@ -60,11 +68,11 @@ RUN apk update && apk add --no-cache ca-certificates tzdata sqlite
 
 COPY --from=ta-lib-builder /usr/local /usr/local
 WORKDIR /app
-COPY --from=backend-builder /app/nofx .
+COPY --from=backend-builder /app/nofx ./
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 CMD ["./nofx"]

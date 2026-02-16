@@ -1,9 +1,9 @@
 # docker/frontend/Dockerfile
-
-# ═══════════════════════════════════════════════════════════════
-# NOFX Frontend Dockerfile (Node Build → Nginx Runtime)
-# Versions extracted as ARGs for consistency
-# ═══════════════════════════════════════════════════════════════
+#
+# Deprecated:
+# NOFX now ships as a single embedded binary image (see docker/Dockerfile.backend).
+# This Dockerfile is retained only for backward reference and is no longer used by
+# compose files or CI workflows.
 
 ARG NODE_VERSION=20-alpine
 ARG NGINX_VERSION=alpine
