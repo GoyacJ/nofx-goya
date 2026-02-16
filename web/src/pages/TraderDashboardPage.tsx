@@ -62,6 +62,11 @@ function getExchangeTypeFromList(
     return exchange.exchange_type?.toLowerCase() || 'binance'
 }
 
+function getQuoteCurrencyForExchange(exchangeType: string | undefined): string {
+    if (!exchangeType) return 'USDT'
+    return exchangeType.toLowerCase() === 'qmt' ? 'CNY' : 'USDT'
+}
+
 // Helper function to check if exchange is a perp-dex type (wallet-based)
 function isPerpDexExchange(exchangeType: string | undefined): boolean {
     if (!exchangeType) return false
@@ -166,6 +171,7 @@ export function TraderDashboardPage({
     )
     const walletAddress = getWalletAddress(currentExchange)
     const isPerpDex = isPerpDexExchange(currentExchange?.exchange_type)
+    const quoteCurrency = getQuoteCurrencyForExchange(currentExchange?.exchange_type)
 
     // Copy wallet address to clipboard
     const handleCopyAddress = async () => {
@@ -512,7 +518,7 @@ export function TraderDashboardPage({
                     <StatCard
                         title={t('totalEquity', language)}
                         value={`${account?.total_equity?.toFixed(2) || '0.00'}`}
-                        unit="USDT"
+                        unit={quoteCurrency}
                         change={account?.total_pnl_pct || 0}
                         positive={(account?.total_pnl ?? 0) > 0}
                         icon="💰"
@@ -520,14 +526,14 @@ export function TraderDashboardPage({
                     <StatCard
                         title={t('availableBalance', language)}
                         value={`${account?.available_balance?.toFixed(2) || '0.00'}`}
-                        unit="USDT"
+                        unit={quoteCurrency}
                         subtitle={`${account?.available_balance && account?.total_equity ? ((account.available_balance / account.total_equity) * 100).toFixed(1) : '0.0'}% ${t('free', language)}`}
                         icon="💳"
                     />
                     <StatCard
                         title={t('totalPnL', language)}
                         value={`${account?.total_pnl !== undefined && account.total_pnl >= 0 ? '+' : ''}${account?.total_pnl?.toFixed(2) || '0.00'}`}
-                        unit="USDT"
+                        unit={quoteCurrency}
                         change={account?.total_pnl_pct || 0}
                         positive={(account?.total_pnl ?? 0) >= 0}
                         icon="📈"

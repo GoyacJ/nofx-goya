@@ -20,6 +20,7 @@ const EXCHANGE_REGISTRATION_LINKS: Record<string, { url: string; hasReferral?: b
   hyperliquid: { url: 'https://app.hyperliquid.xyz/join/AITRADING', hasReferral: true },
   aster: { url: 'https://www.asterdex.com/en/referral/fdfc0e', hasReferral: true },
   lighter: { url: 'https://app.lighter.xyz/?referral=68151432', hasReferral: true },
+  qmt: { url: 'https://www.thinktrader.net/', hasReferral: false },
 }
 
 import type { TraderConfigData } from '../types'
@@ -157,6 +158,15 @@ export function TraderConfigModal({
   const handleSave = async () => {
     if (!onSave) return
 
+    if (isQMTExchange && selectedStrategy && selectedStrategySourceType !== 'static') {
+      toast.error(
+        language === 'zh'
+          ? 'QMT 仅支持静态币池（coin_source.source_type=static），请先切换策略币池类型。'
+          : 'QMT only supports static coin source (coin_source.source_type=static). Please update strategy first.'
+      )
+      return
+    }
+
     setIsSaving(true)
     try {
       const saveData: CreateTraderRequest = {
@@ -164,7 +174,7 @@ export function TraderConfigModal({
         ai_model_id: formData.ai_model,
         exchange_id: formData.exchange_id,
         strategy_id: formData.strategy_id,
-        is_cross_margin: formData.is_cross_margin,
+        is_cross_margin: isQMTExchange ? true : formData.is_cross_margin,
         show_in_competition: formData.show_in_competition,
         scan_interval_minutes: formData.scan_interval_minutes,
       }
@@ -188,6 +198,10 @@ export function TraderConfigModal({
   }
 
   const selectedStrategy = strategies.find(s => s.id === formData.strategy_id)
+  const selectedExchange = availableExchanges.find((e) => e.id === formData.exchange_id)
+  const selectedExchangeType = selectedExchange?.exchange_type?.toLowerCase() || ''
+  const isQMTExchange = selectedExchangeType === 'qmt'
+  const selectedStrategySourceType = selectedStrategy?.config?.coin_source?.source_type || 'static'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 overflow-y-auto">
@@ -287,10 +301,7 @@ export function TraderConfigModal({
                   </select>
                   {/* Exchange Registration Link */}
                   {formData.exchange_id && (() => {
-                    // Find the selected exchange to get its type
-                    const selectedExchange = availableExchanges.find(e => e.id === formData.exchange_id)
-                    const exchangeType = selectedExchange?.exchange_type?.toLowerCase() || ''
-                    const regLink = EXCHANGE_REGISTRATION_LINKS[exchangeType]
+                    const regLink = EXCHANGE_REGISTRATION_LINKS[selectedExchangeType]
                     if (!regLink) return null
                     return (
                       <a
@@ -336,9 +347,9 @@ export function TraderConfigModal({
                   <option value="">{t('noStrategyManual', language)}</option>
                   {strategies.map((strategy) => (
                     <option key={strategy.id} value={strategy.id}>
-                      {selectedStrategy.name}
-                      {selectedStrategy.is_active ? t('active', language) : ''}
-                      {selectedStrategy.is_default ? t('default', language) : ''}
+                      {strategy.name}
+                      {strategy.is_active ? ` (${t('active', language)})` : ''}
+                      {strategy.is_default ? ` (${t('default', language)})` : ''}
                     </option>
                   ))}
                 </select>
@@ -375,6 +386,13 @@ export function TraderConfigModal({
                       {t('marginLimit', language)}: {((selectedStrategy.config.risk_control?.max_margin_usage || 0.9) * 100).toFixed(0)}%
                     </div>
                   </div>
+                  {isQMTExchange && selectedStrategySourceType !== 'static' && (
+                    <div className="mt-3 px-3 py-2 rounded bg-red-500/10 border border-red-500/30 text-xs text-red-400">
+                      {language === 'zh'
+                        ? '当前策略币池不是 static。QMT 交易员创建将被拒绝，请在策略中心改为静态币池。'
+                        : 'Current strategy coin source is not static. QMT trader creation will be rejected; switch strategy to static coin source.'}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -395,11 +413,12 @@ export function TraderConfigModal({
                     <button
                       type="button"
                       onClick={() => handleInputChange('is_cross_margin', true)}
+                      disabled={isQMTExchange}
                       className={`flex-1 px-3 py-2 rounded text-sm ${
                         formData.is_cross_margin
                           ? 'bg-[#F0B90B] text-black'
                           : 'bg-[#0B0E11] text-[#848E9C] border border-[#2B3139]'
-                      }`}
+                      } ${isQMTExchange ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       {t('crossMargin', language)}
                     </button>
@@ -408,15 +427,23 @@ export function TraderConfigModal({
                       onClick={() =>
                         handleInputChange('is_cross_margin', false)
                       }
+                      disabled={isQMTExchange}
                       className={`flex-1 px-3 py-2 rounded text-sm ${
                         !formData.is_cross_margin
                           ? 'bg-[#F0B90B] text-black'
                           : 'bg-[#0B0E11] text-[#848E9C] border border-[#2B3139]'
-                      }`}
+                      } ${isQMTExchange ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       {t('isolatedMargin', language)}
                     </button>
                   </div>
+                  {isQMTExchange && (
+                    <p className="text-xs text-[#848E9C] mt-1">
+                      {language === 'zh'
+                        ? 'QMT 普通账户为现金账户，保证金模式固定，不支持切换。'
+                        : 'QMT cash account uses fixed margin behavior; margin mode switching is unavailable.'}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm text-[#EAECEF] block mb-2">

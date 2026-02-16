@@ -116,6 +116,41 @@ export function CoinSourceEditor({
     return xyzDexAssets.has(base)
   }
 
+  const normalizeCNSymbol = (symbol: string): string | null => {
+    const upper = symbol.toUpperCase().trim()
+    const compact = upper.replace(/\s+/g, '').replace(/_/g, '').replace(/-/g, '')
+    if (!compact) return null
+
+    let code = compact
+    let market = ''
+
+    if (code.startsWith('SH')) {
+      market = 'SH'
+      code = code.slice(2)
+    } else if (code.startsWith('SZ')) {
+      market = 'SZ'
+      code = code.slice(2)
+    } else if (code.endsWith('.SH')) {
+      market = 'SH'
+      code = code.slice(0, -3)
+    } else if (code.endsWith('.SZ')) {
+      market = 'SZ'
+      code = code.slice(0, -3)
+    } else if (code.endsWith('SH')) {
+      market = 'SH'
+      code = code.slice(0, -2)
+    } else if (code.endsWith('SZ')) {
+      market = 'SZ'
+      code = code.slice(0, -2)
+    }
+
+    if (!/^\d{6}$/.test(code)) return null
+    if (!market) {
+      market = code.startsWith('6') || code.startsWith('9') ? 'SH' : 'SZ'
+    }
+    return `${code}.${market}`
+  }
+
   const handleAddCoin = () => {
     if (!newCoin.trim()) return
     const symbol = newCoin.toUpperCase().trim()
@@ -127,7 +162,8 @@ export function CoinSourceEditor({
       const base = symbol.replace(/^xyz:/i, '').replace(/USDT$|USD$|-USDC$/i, '')
       formattedSymbol = `xyz:${base}`
     } else {
-      formattedSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`
+      const cnSymbol = normalizeCNSymbol(symbol)
+      formattedSymbol = cnSymbol || (symbol.endsWith('USDT') ? symbol : `${symbol}USDT`)
     }
 
     const currentCoins = config.static_coins || []
@@ -157,7 +193,8 @@ export function CoinSourceEditor({
       const base = symbol.replace(/^xyz:/i, '').replace(/USDT$|USD$|-USDC$/i, '')
       formattedSymbol = `xyz:${base}`
     } else {
-      formattedSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`
+      const cnSymbol = normalizeCNSymbol(symbol)
+      formattedSymbol = cnSymbol || (symbol.endsWith('USDT') ? symbol : `${symbol}USDT`)
     }
 
     const currentExcluded = config.excluded_coins || []
@@ -250,7 +287,7 @@ export function CoinSourceEditor({
                 value={newCoin}
                 onChange={(e) => setNewCoin(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddCoin()}
-                placeholder="BTC, ETH, SOL..."
+                placeholder={language === 'zh' ? 'BTCUSDT / ETHUSDT / 600519.SH' : 'BTCUSDT / ETHUSDT / 600519.SH'}
                 className="flex-1 px-4 py-2 rounded-lg bg-nofx-bg border border-nofx-gold/20 text-nofx-text"
               />
               <button
@@ -306,7 +343,7 @@ export function CoinSourceEditor({
               value={newExcludedCoin}
               onChange={(e) => setNewExcludedCoin(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddExcludedCoin()}
-              placeholder="BTC, ETH, DOGE..."
+              placeholder={language === 'zh' ? 'BTCUSDT / 600519.SH' : 'BTCUSDT / 600519.SH'}
               className="flex-1 px-4 py-2 rounded-lg text-sm bg-nofx-bg border border-nofx-gold/20 text-nofx-text"
             />
             <button

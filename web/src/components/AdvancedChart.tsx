@@ -576,7 +576,7 @@ export function AdvancedChart({
           const volumeEnabled = indicators.find(i => i.id === 'volume')?.enabled
           if (volumeEnabled) {
             const volumeData = klineData.map((k: Kline) => ({
-              time: k.time,
+              time: k.time as Time,
               value: k.volume || 0,
               color: k.close >= k.open ? 'rgba(14, 203, 129, 0.5)' : 'rgba(246, 70, 93, 0.5)',
             }))

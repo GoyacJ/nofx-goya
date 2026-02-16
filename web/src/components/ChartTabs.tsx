@@ -47,6 +47,41 @@ const INTERVALS: { value: Interval; label: string }[] = [
   { value: '1d', label: '1d' },
 ]
 
+function normalizeCNSymbolInput(raw: string): string {
+  const upper = raw.trim().toUpperCase()
+  const compact = upper.replace(/\s+/g, '').replace(/_/g, '').replace(/-/g, '')
+  if (!compact) return upper
+
+  let code = compact
+  let market = ''
+
+  if (code.startsWith('SH')) {
+    market = 'SH'
+    code = code.slice(2)
+  } else if (code.startsWith('SZ')) {
+    market = 'SZ'
+    code = code.slice(2)
+  } else if (code.endsWith('.SH')) {
+    market = 'SH'
+    code = code.slice(0, -3)
+  } else if (code.endsWith('.SZ')) {
+    market = 'SZ'
+    code = code.slice(0, -3)
+  } else if (code.endsWith('SH')) {
+    market = 'SH'
+    code = code.slice(0, -2)
+  } else if (code.endsWith('SZ')) {
+    market = 'SZ'
+    code = code.slice(0, -2)
+  }
+
+  if (!/^\d{6}$/.test(code)) return upper
+  if (!market) {
+    market = code.startsWith('6') || code.startsWith('9') ? 'SH' : 'SZ'
+  }
+  return `${code}.${market}`
+}
+
 // 根据交易所类型推断市场类型
 function getMarketTypeFromExchange(exchangeType: string | undefined): MarketType {
   if (!exchangeType) return 'hyperliquid'
@@ -73,7 +108,9 @@ export function ChartTabs({ traderId, selectedSymbol, updateKey, exchangeType, e
   useEffect(() => {
     const newMarketType = getMarketTypeFromExchange(exchangeType)
     setMarketType(newMarketType)
-  }, [exchangeType])
+    if (selectedSymbol) return
+    setChartSymbol(MARKET_CONFIG[newMarketType].defaultSymbol)
+  }, [exchangeType, selectedSymbol])
 
   // 根据市场类型确定交易所
   const marketConfig = MARKET_CONFIG[marketType]
@@ -99,6 +136,9 @@ export function ChartTabs({ traderId, selectedSymbol, updateKey, exchangeType, e
           const qmtSymbols = await api.getQMTSymbols(exchangeId, 'watchlist')
           if (!mounted) return
           setAvailableSymbols(qmtSymbols.map((s) => ({ symbol: s, name: s, category: 'stock' })))
+          if (!selectedSymbol && qmtSymbols.length > 0) {
+            setChartSymbol((current) => (qmtSymbols.includes(current) ? current : qmtSymbols[0]))
+          }
           return
         }
 
@@ -163,6 +203,9 @@ export function ChartTabs({ traderId, selectedSymbol, updateKey, exchangeType, e
     e.preventDefault()
     if (symbolInput.trim()) {
       let symbol = symbolInput.trim().toUpperCase()
+      if (marketType === 'qmt') {
+        symbol = normalizeCNSymbolInput(symbol)
+      }
       // 加密货币自动加 USDT 后缀
       if (marketType === 'crypto' && !symbol.endsWith('USDT')) {
         symbol = symbol + 'USDT'
