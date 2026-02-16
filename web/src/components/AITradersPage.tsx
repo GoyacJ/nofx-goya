@@ -1723,7 +1723,7 @@ function ModelConfigModal({
                   type="url"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder={t('customBaseURLPlaceholder', language)}
+                  placeholder={isMiniMax ? t('minimaxBaseURLPlaceholder', language) : t('customBaseURLPlaceholder', language)}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
                 />
@@ -1744,7 +1744,7 @@ function ModelConfigModal({
                   type="text"
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
-                  placeholder={t('customModelNamePlaceholder', language)}
+                  placeholder={isMiniMax ? t('minimaxModelNamePlaceholder', language) : t('customModelNamePlaceholder', language)}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
                 />
