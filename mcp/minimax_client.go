@@ -2,11 +2,12 @@ package mcp
 
 import (
 	"net/http"
+	"strings"
 )
 
 const (
 	ProviderMiniMax       = "minimax"
-	DefaultMiniMaxBaseURL = "https://api.minimaxi.com/anthropic"
+	DefaultMiniMaxBaseURL = "https://api.minimaxi.com/v1"
 	DefaultMiniMaxModel   = "MiniMax-M2.5"
 )
 
@@ -47,8 +48,12 @@ func (c *MiniMaxClient) SetAPIKey(apiKey string, customURL string, customModel s
 		c.logger.Infof("🔧 [MCP] MiniMax API Key: %s...%s", apiKey[:4], apiKey[len(apiKey)-4:])
 	}
 	if customURL != "" {
-		c.BaseURL = customURL
-		c.logger.Infof("🔧 [MCP] MiniMax using custom BaseURL: %s", customURL)
+		normalizedURL := normalizeMiniMaxBaseURL(customURL)
+		c.BaseURL = normalizedURL
+		if normalizedURL != strings.TrimRight(strings.TrimSpace(customURL), "/") {
+			c.logger.Warnf("⚠️  [MCP] MiniMax normalized custom BaseURL from %s to %s", customURL, normalizedURL)
+		}
+		c.logger.Infof("🔧 [MCP] MiniMax using custom BaseURL: %s", normalizedURL)
 	} else {
 		c.BaseURL = DefaultMiniMaxBaseURL
 		c.logger.Infof("🔧 [MCP] MiniMax using default BaseURL: %s", c.BaseURL)
@@ -65,4 +70,28 @@ func (c *MiniMaxClient) SetAPIKey(apiKey string, customURL string, customModel s
 // MiniMax uses standard OpenAI-compatible API with Bearer auth.
 func (c *MiniMaxClient) setAuthHeader(reqHeaders http.Header) {
 	c.Client.setAuthHeader(reqHeaders)
+}
+
+func normalizeMiniMaxBaseURL(rawURL string) string {
+	baseURL := strings.TrimRight(strings.TrimSpace(rawURL), "/")
+	if baseURL == "" {
+		return baseURL
+	}
+
+	if strings.HasSuffix(baseURL, "/chat/completions") {
+		baseURL = strings.TrimSuffix(baseURL, "/chat/completions")
+	}
+
+	// Backward compatibility: old MiniMax examples used `/anthropic`,
+	// but this client sends OpenAI-compatible payloads to `/v1/chat/completions`.
+	if strings.HasSuffix(baseURL, "/anthropic") {
+		return strings.TrimSuffix(baseURL, "/anthropic") + "/v1"
+	}
+
+	switch baseURL {
+	case "https://api.minimax.io", "https://api.minimaxi.com":
+		return baseURL + "/v1"
+	}
+
+	return baseURL
 }

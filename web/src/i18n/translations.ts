@@ -368,6 +368,7 @@ export const translations = {
     apiKey: 'API Key',
     customAPIURL: 'Custom API URL',
     enterAPIKey: 'Enter API Key',
+    leaveBlankToKeepAPIKey: 'Leave blank to keep existing API Key',
     enterCustomAPIURL: 'Enter custom API endpoint URL',
     useOfficialAPI: 'Use official API service',
     useCustomAPI: 'Use custom API endpoint',
@@ -572,7 +573,8 @@ export const translations = {
     customBaseURL: 'Base URL (Optional)',
     customBaseURLPlaceholder:
       'Custom API base URL, e.g.: https://api.openai.com/v1',
-    minimaxBaseURLPlaceholder: 'Default: https://api.minimaxi.com/anthropic',
+    minimaxBaseURLPlaceholder: 'Default: https://api.minimaxi.com/v1',
+    openclawBaseURLPlaceholder: 'Required: https://<your-openclaw-gateway>/v1',
     leaveBlankForDefault: 'Leave blank to use default API address',
     modelConfigInfo1:
       '• For official API, only API Key is required, leave other fields blank',
@@ -584,11 +586,25 @@ export const translations = {
     kimiApiNote:
       'Kimi requires API Key from international site (moonshot.ai), China region keys are not compatible',
     minimaxApiNote:
-      'MiniMax defaults to https://api.minimaxi.com/anthropic and model MiniMax-M2.5. Fill Base URL / Model Name only when overriding.',
+      'MiniMax defaults to https://api.minimaxi.com/v1 and model MiniMax-M2.5. Official docs may show /anthropic for Anthropic SDK; in NOFX (OpenAI-compatible requests), /anthropic will be auto-converted to /v1.',
+    openclawApiNote:
+      'OpenClaw requires explicit Base URL and Model Name. No built-in defaults are applied.',
+    openclawWebhookSecret: 'Webhook Secret (Optional)',
+    openclawWebhookSecretPlaceholder:
+      'Enter OpenClaw webhook signing secret',
+    openclawWebhookSecretHint:
+      'Used to verify OpenClaw webhook signatures for this account.',
+    openclawWebhookSecretKeepHint:
+      'Already configured. Leave blank to keep current secret.',
     leaveBlankForDefaultModel: 'Leave blank to use default model',
     customModelName: 'Model Name (Optional)',
     customModelNamePlaceholder: 'e.g.: deepseek-chat, qwen3-max, gpt-4o',
     minimaxModelNamePlaceholder: 'Default: MiniMax-M2.5',
+    openclawModelNamePlaceholder: 'Required: your-openclaw-model-id',
+    testConnection: 'Test Connection',
+    testingConnection: 'Testing...',
+    testConnectionSuccess: 'Connection test succeeded',
+    testConnectionFailed: 'Connection test failed',
     saveConfig: 'Save Configuration',
     editExchange: 'Edit Exchange',
     addExchange: 'Add Exchange',
@@ -626,6 +642,8 @@ export const translations = {
     operationFailed: 'Operation failed',
     deleteConfigFailed: 'Failed to delete configuration',
     modelNotExist: 'Model does not exist',
+    openclawBaseURLRequired: 'OpenClaw requires Base URL',
+    openclawModelRequired: 'OpenClaw requires Model Name',
     saveConfigFailed: 'Failed to save configuration',
     exchangeNotExist: 'Exchange does not exist',
     deleteExchangeConfigFailed: 'Failed to delete exchange configuration',
@@ -882,7 +900,7 @@ export const translations = {
 
     faqSupportedAIModels: 'Which AI models are supported?',
     faqSupportedAIModelsAnswer:
-      'NOFX supports 8+ AI models: DeepSeek (recommended for cost/performance), Alibaba Qwen, OpenAI (GPT-5.2), Anthropic Claude, Google Gemini, xAI Grok, Kimi (Moonshot), and MiniMax. You can also use any OpenAI-compatible API endpoint. Each model has different strengths - DeepSeek is cost-effective, OpenAI models are powerful but expensive, Claude excels at reasoning.',
+      'NOFX supports 9+ AI models: DeepSeek (recommended for cost/performance), Alibaba Qwen, OpenAI (GPT-5.2), Anthropic Claude, Google Gemini, xAI Grok, Kimi (Moonshot), MiniMax, and OpenClaw gateway routing. You can also use any OpenAI-compatible API endpoint. Each model has different strengths - DeepSeek is cost-effective, OpenAI models are powerful but expensive, Claude excels at reasoning.',
 
     faqSystemRequirements: 'What are the system requirements?',
     faqSystemRequirementsAnswer:
@@ -1619,6 +1637,7 @@ export const translations = {
     apiKey: 'API密钥',
     customAPIURL: '自定义API地址',
     enterAPIKey: '请输入API密钥',
+    leaveBlankToKeepAPIKey: '留空表示保持当前 API Key 不变',
     enterCustomAPIURL: '请输入自定义API端点地址',
     useOfficialAPI: '使用官方API服务',
     useCustomAPI: '使用自定义API端点',
@@ -1800,7 +1819,8 @@ export const translations = {
     pleaseSelectModel: '请选择模型',
     customBaseURL: 'Base URL (可选)',
     customBaseURLPlaceholder: '自定义API基础URL，如: https://api.openai.com/v1',
-    minimaxBaseURLPlaceholder: '默认: https://api.minimaxi.com/anthropic',
+    minimaxBaseURLPlaceholder: '默认: https://api.minimaxi.com/v1',
+    openclawBaseURLPlaceholder: '必填: https://<your-openclaw-gateway>/v1',
     leaveBlankForDefault: '留空则使用默认API地址',
     modelConfigInfo1: '• 使用官方 API 时，只需填写 API Key，其他字段留空即可',
     modelConfigInfo2:
@@ -1811,11 +1831,22 @@ export const translations = {
     kimiApiNote:
       'Kimi 需要从国际站申请 API Key (moonshot.ai)，中国区 Key 不通用',
     minimaxApiNote:
-      'MiniMax 默认使用 https://api.minimaxi.com/anthropic 和模型 MiniMax-M2.5，只有需要覆盖默认值时才填写 Base URL / Model Name。',
+      'MiniMax 默认使用 https://api.minimaxi.com/v1 和模型 MiniMax-M2.5。官方文档里 /anthropic 是给 Anthropic SDK 的兼容入口；NOFX 使用 OpenAI 兼容请求，会自动将 /anthropic 转换为 /v1。',
+    openclawApiNote:
+      'OpenClaw 需要显式填写 Base URL 和 Model Name，不提供内置默认值。',
+    openclawWebhookSecret: 'Webhook Secret（可选）',
+    openclawWebhookSecretPlaceholder: '填写 OpenClaw webhook 签名密钥',
+    openclawWebhookSecretHint: '用于校验当前账户的 OpenClaw webhook 签名。',
+    openclawWebhookSecretKeepHint: '已配置。留空表示保持当前密钥不变。',
     leaveBlankForDefaultModel: '留空使用默认模型名称',
     customModelName: 'Model Name (可选)',
     customModelNamePlaceholder: '例如: deepseek-chat, qwen3-max, gpt-4o',
     minimaxModelNamePlaceholder: '默认: MiniMax-M2.5',
+    openclawModelNamePlaceholder: '必填: your-openclaw-model-id',
+    testConnection: '测试连接',
+    testingConnection: '测试中...',
+    testConnectionSuccess: '连接测试成功',
+    testConnectionFailed: '连接测试失败',
     saveConfig: '保存配置',
     editExchange: '编辑交易所',
     addExchange: '添加交易所',
@@ -1847,6 +1878,8 @@ export const translations = {
     operationFailed: '操作失败',
     deleteConfigFailed: '删除配置失败',
     modelNotExist: '模型不存在',
+    openclawBaseURLRequired: 'OpenClaw 必须填写 Base URL',
+    openclawModelRequired: 'OpenClaw 必须填写 Model Name',
     saveConfigFailed: '保存配置失败',
     exchangeNotExist: '交易所不存在',
     deleteExchangeConfigFailed: '删除交易所配置失败',
@@ -2083,7 +2116,7 @@ export const translations = {
 
     faqSupportedAIModels: '支持哪些 AI 模型？',
     faqSupportedAIModelsAnswer:
-      'NOFX 支持 8+ 种 AI 模型：DeepSeek（推荐性价比）、阿里云通义千问、OpenAI（GPT-5.2）、Anthropic Claude、Google Gemini、xAI Grok、Kimi（月之暗面）、MiniMax。您也可以使用任何 OpenAI 兼容的 API 端点。每个模型各有优势 - DeepSeek 性价比高，OpenAI 能力强但贵，Claude 擅长推理。',
+      'NOFX 支持 9+ 种 AI 模型：DeepSeek（推荐性价比）、阿里云通义千问、OpenAI（GPT-5.2）、Anthropic Claude、Google Gemini、xAI Grok、Kimi（月之暗面）、MiniMax，以及 OpenClaw 网关路由。您也可以使用任何 OpenAI 兼容的 API 端点。每个模型各有优势 - DeepSeek 性价比高，OpenAI 能力强但贵，Claude 擅长推理。',
 
     faqSystemRequirements: '系统要求是什么？',
     faqSystemRequirementsAnswer:

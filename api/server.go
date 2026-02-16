@@ -146,6 +146,7 @@ func (s *Server) setupRoutes() {
 
 		// Public strategy market (no authentication required)
 		api.GET("/strategies/public", s.handlePublicStrategies)
+		api.POST("/openclaw/webhooks/events", s.handleOpenClawWebhookEvent)
 
 		// Authentication related routes (no authentication required)
 		api.POST("/register", s.handleRegister)
@@ -179,6 +180,7 @@ func (s *Server) setupRoutes() {
 			// AI model configuration
 			protected.GET("/models", s.handleGetModelConfigs)
 			protected.PUT("/models", s.handleUpdateModelConfigs)
+			protected.POST("/models/test", s.handleTestModelConfig)
 
 			// Exchange configuration
 			protected.GET("/exchanges", s.handleGetExchangeConfigs)
@@ -230,6 +232,11 @@ func (s *Server) setupRoutes() {
 			// Backtest routes
 			backtest := protected.Group("/backtest")
 			s.registerBacktestRoutes(backtest)
+
+			// OpenClaw governance routes
+			protected.GET("/openclaw/approvals", s.handleListOpenClawApprovals)
+			protected.POST("/openclaw/approvals/:id/approve", s.handleApproveOpenClawApproval)
+			protected.POST("/openclaw/approvals/:id/reject", s.handleRejectOpenClawApproval)
 		}
 	}
 
@@ -545,12 +552,13 @@ type ModelConfig struct {
 
 // SafeModelConfig Safe model configuration structure (does not contain sensitive information)
 type SafeModelConfig struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Provider        string `json:"provider"`
-	Enabled         bool   `json:"enabled"`
-	CustomAPIURL    string `json:"customApiUrl"`    // Custom API URL (usually not sensitive)
-	CustomModelName string `json:"customModelName"` // Custom model name (not sensitive)
+	ID                      string `json:"id"`
+	Name                    string `json:"name"`
+	Provider                string `json:"provider"`
+	Enabled                 bool   `json:"enabled"`
+	CustomAPIURL            string `json:"customApiUrl"`            // Custom API URL (usually not sensitive)
+	CustomModelName         string `json:"customModelName"`         // Custom model name (not sensitive)
+	WebhookSecretConfigured bool   `json:"webhookSecretConfigured"` // Whether webhook secret is configured (value is never returned)
 }
 
 type ExchangeConfig struct {
@@ -590,6 +598,7 @@ type ModelUpdateConfig struct {
 	APIKey          string `json:"api_key"`
 	CustomAPIURL    string `json:"custom_api_url"`
 	CustomModelName string `json:"custom_model_name"`
+	WebhookSecret   string `json:"webhook_secret"`
 }
 
 type UpdateExchangeConfigRequest struct {
@@ -1612,7 +1621,7 @@ func (s *Server) buildTempTraderFromExchange(exchangeCfg *store.Exchange, userID
 
 	switch exchangeCfg.ExchangeType {
 	case "binance":
-		return binance.NewFuturesTrader(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID), nil
+		return binance.NewFuturesTraderWithTestnet(string(exchangeCfg.APIKey), string(exchangeCfg.SecretKey), userID, exchangeCfg.Testnet), nil
 	case "hyperliquid":
 		return hyperliquidtrader.NewHyperliquidTrader(
 			string(exchangeCfg.APIKey),
@@ -1620,38 +1629,44 @@ func (s *Server) buildTempTraderFromExchange(exchangeCfg *store.Exchange, userID
 			exchangeCfg.Testnet,
 		)
 	case "aster":
-		return aster.NewAsterTrader(
+		return aster.NewAsterTraderWithTestnet(
 			exchangeCfg.AsterUser,
 			exchangeCfg.AsterSigner,
 			string(exchangeCfg.AsterPrivateKey),
+			exchangeCfg.Testnet,
 		)
 	case "bybit":
-		return bybit.NewBybitTrader(
+		return bybit.NewBybitTraderWithTestnet(
 			string(exchangeCfg.APIKey),
 			string(exchangeCfg.SecretKey),
+			exchangeCfg.Testnet,
 		), nil
 	case "okx":
 		return okx.NewOKXTrader(
 			string(exchangeCfg.APIKey),
 			string(exchangeCfg.SecretKey),
 			string(exchangeCfg.Passphrase),
+			exchangeCfg.Testnet,
 		), nil
 	case "bitget":
-		return bitget.NewBitgetTrader(
+		return bitget.NewBitgetTraderWithTestnet(
 			string(exchangeCfg.APIKey),
 			string(exchangeCfg.SecretKey),
 			string(exchangeCfg.Passphrase),
+			exchangeCfg.Testnet,
 		), nil
 	case "gate":
-		return gate.NewGateTrader(
+		return gate.NewGateTraderWithTestnet(
 			string(exchangeCfg.APIKey),
 			string(exchangeCfg.SecretKey),
+			exchangeCfg.Testnet,
 		), nil
 	case "kucoin":
-		return kucoin.NewKuCoinTrader(
+		return kucoin.NewKuCoinTraderWithTestnet(
 			string(exchangeCfg.APIKey),
 			string(exchangeCfg.SecretKey),
 			string(exchangeCfg.Passphrase),
+			exchangeCfg.Testnet,
 		), nil
 	case "lighter":
 		if exchangeCfg.LighterWalletAddr == "" || string(exchangeCfg.LighterAPIKeyPrivateKey) == "" {
@@ -1661,7 +1676,7 @@ func (s *Server) buildTempTraderFromExchange(exchangeCfg *store.Exchange, userID
 			exchangeCfg.LighterWalletAddr,
 			string(exchangeCfg.LighterAPIKeyPrivateKey),
 			exchangeCfg.LighterAPIKeyIndex,
-			false, // Always use mainnet for Lighter
+			exchangeCfg.Testnet,
 		)
 	case "qmt":
 		if exchangeCfg.QMTGatewayURL == "" || exchangeCfg.QMTAccountID == "" || string(exchangeCfg.QMTGatewayToken) == "" {
@@ -1717,6 +1732,7 @@ func buildDefaultSafeModels() []SafeModelConfig {
 		{ID: "grok", Name: "Grok AI", Provider: "grok", Enabled: false},
 		{ID: "kimi", Name: "Kimi AI", Provider: "kimi", Enabled: false},
 		{ID: "minimax", Name: "MiniMax AI", Provider: "minimax", Enabled: false},
+		{ID: "openclaw", Name: "OpenClaw AI", Provider: "openclaw", Enabled: false},
 	}
 }
 
@@ -1730,6 +1746,7 @@ func buildSupportedModels() []map[string]interface{} {
 		{"id": "grok", "name": "Grok (xAI)", "provider": "grok", "defaultModel": "grok-3-latest"},
 		{"id": "kimi", "name": "Kimi (Moonshot)", "provider": "kimi", "defaultModel": "moonshot-v1-auto"},
 		{"id": "minimax", "name": "MiniMax", "provider": "minimax", "defaultModel": mcp.DefaultMiniMaxModel},
+		{"id": "openclaw", "name": "OpenClaw", "provider": "openclaw", "defaultModel": ""},
 	}
 }
 
@@ -1748,6 +1765,7 @@ func normalizeProviderFromModelKey(modelKey string) string {
 		"grok":     {},
 		"kimi":     {},
 		"minimax":  {},
+		"openclaw": {},
 		"custom":   {},
 	}
 	if _, ok := knownProviders[key]; ok {
@@ -1766,15 +1784,19 @@ func normalizeProviderFromModelKey(modelKey string) string {
 
 func validateModelConfigUpdate(modelKey string, modelData ModelUpdateConfig, existingModel *store.AIModel) error {
 	provider := normalizeProviderFromModelKey(modelKey)
-	if provider != "minimax" || !modelData.Enabled {
+	if !modelData.Enabled {
 		return nil
 	}
 
+	finalAPIKey := strings.TrimSpace(modelData.APIKey)
 	finalBaseURL := strings.TrimSpace(modelData.CustomAPIURL)
 	finalModelName := strings.TrimSpace(modelData.CustomModelName)
 
 	// Support partial update payloads by falling back to persisted values.
 	if existingModel != nil {
+		if finalAPIKey == "" {
+			finalAPIKey = strings.TrimSpace(string(existingModel.APIKey))
+		}
 		if finalBaseURL == "" {
 			finalBaseURL = strings.TrimSpace(existingModel.CustomAPIURL)
 		}
@@ -1783,15 +1805,27 @@ func validateModelConfigUpdate(modelKey string, modelData ModelUpdateConfig, exi
 		}
 	}
 
-	if finalBaseURL == "" {
-		finalBaseURL = mcp.DefaultMiniMaxBaseURL
-	}
-	if finalModelName == "" {
-		finalModelName = mcp.DefaultMiniMaxModel
-	}
-
-	if finalBaseURL == "" || finalModelName == "" {
-		return fmt.Errorf("MiniMax requires valid base URL and model")
+	switch provider {
+	case "minimax":
+		if finalBaseURL == "" {
+			finalBaseURL = mcp.DefaultMiniMaxBaseURL
+		}
+		if finalModelName == "" {
+			finalModelName = mcp.DefaultMiniMaxModel
+		}
+		if finalBaseURL == "" || finalModelName == "" {
+			return fmt.Errorf("MiniMax requires valid base URL and model")
+		}
+	case "openclaw":
+		if finalAPIKey == "" {
+			return fmt.Errorf("OpenClaw requires API key")
+		}
+		if finalBaseURL == "" {
+			return fmt.Errorf("OpenClaw requires explicit base URL")
+		}
+		if finalModelName == "" {
+			return fmt.Errorf("OpenClaw requires explicit model name")
+		}
 	}
 
 	return nil
@@ -1822,12 +1856,13 @@ func (s *Server) handleGetModelConfigs(c *gin.Context) {
 	safeModels := make([]SafeModelConfig, len(models))
 	for i, model := range models {
 		safeModels[i] = SafeModelConfig{
-			ID:              model.ID,
-			Name:            model.Name,
-			Provider:        model.Provider,
-			Enabled:         model.Enabled,
-			CustomAPIURL:    model.CustomAPIURL,
-			CustomModelName: model.CustomModelName,
+			ID:                      model.ID,
+			Name:                    model.Name,
+			Provider:                model.Provider,
+			Enabled:                 model.Enabled,
+			CustomAPIURL:            model.CustomAPIURL,
+			CustomModelName:         model.CustomModelName,
+			WebhookSecretConfigured: strings.TrimSpace(string(model.WebhookSecret)) != "",
 		}
 	}
 
@@ -1927,7 +1962,15 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 			tradersToReload[t.ID] = true
 		}
 
-		err := s.store.AIModel().Update(userID, modelID, modelData.Enabled, modelData.APIKey, modelData.CustomAPIURL, modelData.CustomModelName)
+		err := s.store.AIModel().Update(
+			userID,
+			modelID,
+			modelData.Enabled,
+			modelData.APIKey,
+			modelData.CustomAPIURL,
+			modelData.CustomModelName,
+			modelData.WebhookSecret,
+		)
 		if err != nil {
 			SafeInternalError(c, fmt.Sprintf("Update model %s", modelID), err)
 			return
@@ -3689,6 +3732,7 @@ func (s *Server) Start() error {
 	logger.Infof("  • POST /api/traders/:id/stop  - Stop AI trader")
 	logger.Infof("  • GET  /api/models           - Get AI model config")
 	logger.Infof("  • PUT  /api/models           - Update AI model config")
+	logger.Infof("  • POST /api/models/test      - Test AI model connectivity")
 	logger.Infof("  • GET  /api/exchanges        - Get exchange config")
 	logger.Infof("  • PUT  /api/exchanges        - Update exchange config")
 	logger.Infof("  • GET  /api/status?trader_id=xxx     - Specified trader's system status")

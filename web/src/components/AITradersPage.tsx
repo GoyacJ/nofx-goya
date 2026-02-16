@@ -46,6 +46,8 @@ function getModelDisplayName(modelId: string): string {
       return 'Claude'
     case 'minimax':
       return 'MiniMax'
+    case 'openclaw':
+      return 'OpenClaw'
     default:
       return modelId.toUpperCase()
   }
@@ -101,6 +103,10 @@ const AI_PROVIDER_CONFIG: Record<string, {
   minimax: {
     defaultModel: 'MiniMax-M2.5',
     apiName: 'MiniMax',
+  },
+  openclaw: {
+    defaultModel: '',
+    apiName: 'OpenClaw',
   },
 }
 
@@ -569,6 +575,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         apiKey: '',
         customApiUrl: '',
         customModelName: '',
+        webhookSecret: '',
         enabled: false,
       }),
       buildRequest: (models) => ({
@@ -580,6 +587,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               api_key: model.apiKey || '',
               custom_api_url: model.customApiUrl || '',
               custom_model_name: model.customModelName || '',
+              webhook_secret: model.webhookSecret || '',
             },
           ])
         ),
@@ -602,7 +610,8 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     modelId: string,
     apiKey: string,
     customApiUrl?: string,
-    customModelName?: string
+    customModelName?: string,
+    webhookSecret?: string
   ) => {
     try {
       // 创建或更新用户的模型配置
@@ -617,6 +626,18 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         return
       }
 
+      const targetProvider = (modelToUpdate.provider || '').toLowerCase()
+      if (targetProvider === 'openclaw') {
+        if (!customApiUrl || !customApiUrl.trim()) {
+          toast.error(t('openclawBaseURLRequired', language))
+          return
+        }
+        if (!customModelName || !customModelName.trim()) {
+          toast.error(t('openclawModelRequired', language))
+          return
+        }
+      }
+
       if (existingModel) {
         // 更新现有配置
         updatedModels =
@@ -627,6 +648,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
                 apiKey,
                 customApiUrl: customApiUrl || '',
                 customModelName: customModelName || '',
+                webhookSecret: webhookSecret || '',
                 enabled: true,
               }
               : m
@@ -638,6 +660,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           apiKey,
           customApiUrl: customApiUrl || '',
           customModelName: customModelName || '',
+          webhookSecret: webhookSecret || '',
           enabled: true,
         }
         updatedModels = [...(allModels || []), newModel]
@@ -652,6 +675,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               api_key: model.apiKey || '',
               custom_api_url: model.customApiUrl || '',
               custom_model_name: model.customModelName || '',
+              webhook_secret: model.webhookSecret || '',
             },
           ])
         ),
@@ -672,6 +696,54 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     } catch (error) {
       console.error('Failed to save model config:', error)
       toast.error(t('saveConfigFailed', language))
+    }
+  }
+
+  const handleTestModelConfig = async (
+    modelId: string,
+    apiKey: string,
+    customApiUrl?: string,
+    customModelName?: string,
+  ) => {
+    const existingModel = allModels?.find((m) => m.id === modelId)
+    const modelToTest = existingModel || supportedModels?.find((m) => m.id === modelId)
+    if (!modelToTest) {
+      toast.error(t('modelNotExist', language))
+      return
+    }
+
+    const provider = (modelToTest.provider || '').toLowerCase()
+    if (!provider) {
+      toast.error(t('testConnectionFailed', language))
+      return
+    }
+
+    try {
+      const result = await api.testModelConfig({
+        model_id: modelId,
+        provider,
+        api_key: apiKey || '',
+        custom_api_url: customApiUrl || '',
+        custom_model_name: customModelName || '',
+      })
+
+      if (result.ok) {
+        const latencyText = result.latency_ms ? ` · ${result.latency_ms} ms` : ''
+        const modelText = result.model ? ` (${result.model})` : ''
+        toast.success(`${t('testConnectionSuccess', language)}${latencyText}`, {
+          description: `${provider}${modelText}`,
+        })
+        return
+      }
+
+      const errText = result.error || t('testConnectionFailed', language)
+      const hintText = result.hint ? `\n${result.hint}` : ''
+      toast.error(t('testConnectionFailed', language), {
+        description: `${errText}${hintText}`,
+      })
+    } catch (error) {
+      console.error('Failed to test model config:', error)
+      toast.error(t('testConnectionFailed', language))
     }
   }
 
@@ -1374,6 +1446,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
             configuredModels={allModels}
             editingModelId={editingModel}
             onSave={handleSaveModelConfig}
+            onTest={handleTestModelConfig}
             onDelete={handleDeleteModelConfig}
             onClose={() => {
               setShowModelModal(false)
@@ -1501,6 +1574,7 @@ function ModelConfigModal({
   configuredModels,
   editingModelId,
   onSave,
+  onTest,
   onDelete,
   onClose,
   language,
@@ -1512,8 +1586,15 @@ function ModelConfigModal({
     modelId: string,
     apiKey: string,
     baseUrl?: string,
-    modelName?: string
+    modelName?: string,
+    webhookSecret?: string
   ) => void
+  onTest: (
+    modelId: string,
+    apiKey: string,
+    baseUrl?: string,
+    modelName?: string,
+  ) => Promise<void>
   onDelete: (modelId: string) => void
   onClose: () => void
   language: Language
@@ -1523,6 +1604,8 @@ function ModelConfigModal({
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [modelName, setModelName] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
+  const [isTesting, setIsTesting] = useState(false)
 
   const selectedModel = editingModelId
     ? configuredModels?.find((m) => m.id === selectedModelId)
@@ -1533,6 +1616,7 @@ function ModelConfigModal({
       setApiKey(selectedModel.apiKey || '')
       setBaseUrl(selectedModel.customApiUrl || '')
       setModelName(selectedModel.customModelName || '')
+      setWebhookSecret('')
     }
   }, [editingModelId, selectedModel])
 
@@ -1552,8 +1636,32 @@ function ModelConfigModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedModelId || !apiKey.trim()) return
-    onSave(selectedModelId, apiKey.trim(), baseUrl.trim() || undefined, modelName.trim() || undefined)
+    if (!selectedModelId || (requiresAPIKey && !apiKey.trim())) return
+    if (requiresExplicitEndpoint && (!baseUrl.trim() || !modelName.trim())) return
+    onSave(
+      selectedModelId,
+      apiKey.trim(),
+      baseUrl.trim() || undefined,
+      modelName.trim() || undefined,
+      webhookSecret.trim() || undefined,
+    )
+  }
+
+  const handleTest = async () => {
+    if (!selectedModelId) return
+    if (!canTest) return
+
+    setIsTesting(true)
+    try {
+      await onTest(
+        selectedModelId,
+        apiKey.trim(),
+        baseUrl.trim() || undefined,
+        modelName.trim() || undefined,
+      )
+    } finally {
+      setIsTesting(false)
+    }
   }
 
   const availableModels = allModels || []
@@ -1561,9 +1669,18 @@ function ModelConfigModal({
   const stepLabels = language === 'zh' ? ['选择模型', '配置 API'] : ['Select Model', 'Configure API']
   const selectedProviderConfig = selectedModel ? AI_PROVIDER_CONFIG[selectedModel.provider] : undefined
   const isMiniMax = selectedModel?.provider === 'minimax'
+  const isOpenClaw = selectedModel?.provider === 'openclaw'
+  const requiresAPIKey = !editingModelId
+  const requiresExplicitEndpoint = isOpenClaw
   const defaultModelLabel = selectedModel
     ? selectedProviderConfig?.defaultModel || selectedModel.id
     : ''
+  const canSubmit = !!selectedModel &&
+    (!requiresAPIKey || !!apiKey.trim()) &&
+    (!requiresExplicitEndpoint || (!!baseUrl.trim() && !!modelName.trim()))
+  const canTest = !!selectedModel &&
+    (!!editingModelId || !!apiKey.trim()) &&
+    (!requiresExplicitEndpoint || !!editingModelId || (!!baseUrl.trim() && !!modelName.trim()))
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto backdrop-blur-sm">
@@ -1692,6 +1809,43 @@ function ModelConfigModal({
                 </div>
               )}
 
+              {/* OpenClaw Warning */}
+              {isOpenClaw && (
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.35)' }}>
+                  <div className="flex items-start gap-2">
+                    <span style={{ fontSize: '16px' }}>⚠️</span>
+                    <div className="text-sm" style={{ color: '#38BDF8' }}>
+                      {t('openclawApiNote', language)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* OpenClaw Webhook Secret */}
+              {isOpenClaw && (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                    <svg className="w-4 h-4" style={{ color: '#38BDF8' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0-1.657 1.567-3 3.5-3s3.5 1.343 3.5 3v2a2 2 0 002 2h.5a1.5 1.5 0 010 3H2.5a1.5 1.5 0 010-3H3a2 2 0 002-2v-2c0-1.657 1.567-3 3.5-3S12 9.343 12 11z" />
+                    </svg>
+                    {t('openclawWebhookSecret', language)}
+                  </label>
+                  <input
+                    type="password"
+                    value={webhookSecret}
+                    onChange={(e) => setWebhookSecret(e.target.value)}
+                    placeholder={t('openclawWebhookSecretPlaceholder', language)}
+                    className="w-full px-4 py-3 rounded-xl"
+                    style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                  />
+                  <div className="text-xs" style={{ color: '#848E9C' }}>
+                    {selectedModel?.webhookSecretConfigured
+                      ? t('openclawWebhookSecretKeepHint', language)
+                      : t('openclawWebhookSecretHint', language)}
+                  </div>
+                </div>
+              )}
+
               {/* API Key */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
@@ -1704,11 +1858,16 @@ function ModelConfigModal({
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={t('enterAPIKey', language)}
+                  placeholder={editingModelId ? t('leaveBlankToKeepAPIKey', language) : t('enterAPIKey', language)}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
-                  required
+                  required={requiresAPIKey}
                 />
+                {editingModelId && (
+                  <div className="text-xs" style={{ color: '#848E9C' }}>
+                    {t('leaveBlankToKeepAPIKey', language)}
+                  </div>
+                )}
               </div>
 
               {/* Custom Base URL */}
@@ -1717,18 +1876,19 @@ function ModelConfigModal({
                   <svg className="w-4 h-4" style={{ color: '#A78BFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
-                  {t('customBaseURL', language)}
+                  {requiresExplicitEndpoint ? `${t('customBaseURL', language)} *` : t('customBaseURL', language)}
                 </label>
                 <input
                   type="url"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder={isMiniMax ? t('minimaxBaseURLPlaceholder', language) : t('customBaseURLPlaceholder', language)}
+                  placeholder={isOpenClaw ? t('openclawBaseURLPlaceholder', language) : (isMiniMax ? t('minimaxBaseURLPlaceholder', language) : t('customBaseURLPlaceholder', language))}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                  required={requiresExplicitEndpoint}
                 />
                 <div className="text-xs" style={{ color: '#848E9C' }}>
-                  {isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefault', language)}
+                  {isOpenClaw ? t('openclawApiNote', language) : (isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefault', language))}
                 </div>
               </div>
 
@@ -1738,18 +1898,19 @@ function ModelConfigModal({
                   <svg className="w-4 h-4" style={{ color: '#A78BFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                   </svg>
-                  {t('customModelName', language)}
+                  {requiresExplicitEndpoint ? `${t('customModelName', language)} *` : t('customModelName', language)}
                 </label>
                 <input
                   type="text"
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
-                  placeholder={isMiniMax ? t('minimaxModelNamePlaceholder', language) : t('customModelNamePlaceholder', language)}
+                  placeholder={isOpenClaw ? t('openclawModelNamePlaceholder', language) : (isMiniMax ? t('minimaxModelNamePlaceholder', language) : t('customModelNamePlaceholder', language))}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                  required={requiresExplicitEndpoint}
                 />
                 <div className="text-xs" style={{ color: '#848E9C' }}>
-                  {isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefaultModel', language)}
+                  {isOpenClaw ? t('openclawApiNote', language) : (isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefaultModel', language))}
                 </div>
               </div>
 
@@ -1772,8 +1933,17 @@ function ModelConfigModal({
                   {editingModelId ? t('cancel', language) : (language === 'zh' ? '返回' : 'Back')}
                 </button>
                 <button
+                  type="button"
+                  onClick={handleTest}
+                  disabled={!canTest || isTesting}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: '#0F766E', color: '#fff' }}
+                >
+                  {isTesting ? t('testingConnection', language) : t('testConnection', language)}
+                </button>
+                <button
                   type="submit"
-                  disabled={!selectedModel || !apiKey.trim()}
+                  disabled={!canSubmit}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ background: '#8B5CF6', color: '#fff' }}
                 >

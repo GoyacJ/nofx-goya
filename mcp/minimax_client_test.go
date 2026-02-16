@@ -36,3 +36,45 @@ func TestMiniMaxClient_SetAPIKey_CustomConfig(t *testing.T) {
 		t.Fatalf("unexpected model: %q", mc.Model)
 	}
 }
+
+func TestMiniMaxClient_SetAPIKey_NormalizesLegacyURLs(t *testing.T) {
+	testCases := []struct {
+		name     string
+		inputURL string
+		wantURL  string
+	}{
+		{
+			name:     "legacy minimaxi anthropic endpoint",
+			inputURL: "https://api.minimaxi.com/anthropic",
+			wantURL:  "https://api.minimaxi.com/v1",
+		},
+		{
+			name:     "legacy minimax anthropic endpoint",
+			inputURL: "https://api.minimax.io/anthropic",
+			wantURL:  "https://api.minimax.io/v1",
+		},
+		{
+			name:     "host only",
+			inputURL: "https://api.minimax.io",
+			wantURL:  "https://api.minimax.io/v1",
+		},
+		{
+			name:     "accidental full endpoint",
+			inputURL: "https://api.minimax.io/v1/chat/completions",
+			wantURL:  "https://api.minimax.io/v1",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewMiniMaxClient()
+			mc := client.(*MiniMaxClient)
+
+			mc.SetAPIKey("test-minimax-api-key", tc.inputURL, "")
+
+			if mc.BaseURL != tc.wantURL {
+				t.Fatalf("for input %q, expected %q, got %q", tc.inputURL, tc.wantURL, mc.BaseURL)
+			}
+		})
+	}
+}

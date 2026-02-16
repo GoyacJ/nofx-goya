@@ -11,6 +11,8 @@ import type {
   CreateTraderRequest,
   CreateExchangeRequest,
   UpdateModelConfigRequest,
+  TestModelConfigRequest,
+  TestModelConfigResponse,
   UpdateExchangeConfigRequest,
   CompetitionData,
   BacktestRunsResponse,
@@ -216,6 +218,31 @@ export const api = {
     // 发送加密数据
     const result = await httpClient.put(`${API_BASE}/models`, encryptedPayload)
     if (!result.success) throw new Error('更新模型配置失败')
+  },
+
+  async testModelConfig(request: TestModelConfigRequest): Promise<TestModelConfigResponse> {
+    const config = await CryptoService.fetchCryptoConfig()
+
+    if (!config.transport_encryption) {
+      const result = await httpClient.post<TestModelConfigResponse>(`${API_BASE}/models/test`, request)
+      if (!result.success) throw new Error(result.message || '模型连接测试失败')
+      return result.data as TestModelConfigResponse
+    }
+
+    const publicKey = await CryptoService.fetchPublicKey()
+    await CryptoService.initialize(publicKey)
+
+    const userId = localStorage.getItem('user_id') || ''
+    const sessionId = sessionStorage.getItem('session_id') || ''
+    const encryptedPayload = await CryptoService.encryptSensitiveData(
+      JSON.stringify(request),
+      userId,
+      sessionId
+    )
+
+    const result = await httpClient.post<TestModelConfigResponse>(`${API_BASE}/models/test`, encryptedPayload)
+    if (!result.success) throw new Error(result.message || '模型连接测试失败')
+    return result.data as TestModelConfigResponse
   },
 
   // 交易所配置接口
