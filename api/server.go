@@ -581,12 +581,14 @@ type SafeExchangeConfig struct {
 }
 
 type UpdateModelConfigRequest struct {
-	Models map[string]struct {
-		Enabled         bool   `json:"enabled"`
-		APIKey          string `json:"api_key"`
-		CustomAPIURL    string `json:"custom_api_url"`
-		CustomModelName string `json:"custom_model_name"`
-	} `json:"models"`
+	Models map[string]ModelUpdateConfig `json:"models"`
+}
+
+type ModelUpdateConfig struct {
+	Enabled         bool   `json:"enabled"`
+	APIKey          string `json:"api_key"`
+	CustomAPIURL    string `json:"custom_api_url"`
+	CustomModelName string `json:"custom_model_name"`
 }
 
 type UpdateExchangeConfigRequest struct {
@@ -1704,6 +1706,89 @@ func (s *Server) validateExchangeStrategyCompatibility(userID, exchangeID, strat
 	return nil
 }
 
+func buildDefaultSafeModels() []SafeModelConfig {
+	return []SafeModelConfig{
+		{ID: "deepseek", Name: "DeepSeek AI", Provider: "deepseek", Enabled: false},
+		{ID: "qwen", Name: "Qwen AI", Provider: "qwen", Enabled: false},
+		{ID: "openai", Name: "OpenAI", Provider: "openai", Enabled: false},
+		{ID: "claude", Name: "Claude AI", Provider: "claude", Enabled: false},
+		{ID: "gemini", Name: "Gemini AI", Provider: "gemini", Enabled: false},
+		{ID: "grok", Name: "Grok AI", Provider: "grok", Enabled: false},
+		{ID: "kimi", Name: "Kimi AI", Provider: "kimi", Enabled: false},
+		{ID: "minimax", Name: "MiniMax AI", Provider: "minimax", Enabled: false},
+	}
+}
+
+func buildSupportedModels() []map[string]interface{} {
+	return []map[string]interface{}{
+		{"id": "deepseek", "name": "DeepSeek", "provider": "deepseek", "defaultModel": "deepseek-chat"},
+		{"id": "qwen", "name": "Qwen", "provider": "qwen", "defaultModel": "qwen3-max"},
+		{"id": "openai", "name": "OpenAI", "provider": "openai", "defaultModel": "gpt-5.1"},
+		{"id": "claude", "name": "Claude", "provider": "claude", "defaultModel": "claude-opus-4-6"},
+		{"id": "gemini", "name": "Google Gemini", "provider": "gemini", "defaultModel": "gemini-3-pro-preview"},
+		{"id": "grok", "name": "Grok (xAI)", "provider": "grok", "defaultModel": "grok-3-latest"},
+		{"id": "kimi", "name": "Kimi (Moonshot)", "provider": "kimi", "defaultModel": "moonshot-v1-auto"},
+		{"id": "minimax", "name": "MiniMax", "provider": "minimax", "defaultModel": ""},
+	}
+}
+
+func normalizeProviderFromModelKey(modelKey string) string {
+	key := strings.ToLower(strings.TrimSpace(modelKey))
+	if key == "" {
+		return ""
+	}
+
+	knownProviders := map[string]struct{}{
+		"deepseek": {},
+		"qwen":     {},
+		"openai":   {},
+		"claude":   {},
+		"gemini":   {},
+		"grok":     {},
+		"kimi":     {},
+		"minimax":  {},
+		"custom":   {},
+	}
+	if _, ok := knownProviders[key]; ok {
+		return key
+	}
+
+	parts := strings.Split(key, "_")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if _, ok := knownProviders[parts[i]]; ok {
+			return parts[i]
+		}
+	}
+
+	return key
+}
+
+func validateModelConfigUpdate(modelKey string, modelData ModelUpdateConfig, existingModel *store.AIModel) error {
+	provider := normalizeProviderFromModelKey(modelKey)
+	if provider != "minimax" || !modelData.Enabled {
+		return nil
+	}
+
+	finalBaseURL := strings.TrimSpace(modelData.CustomAPIURL)
+	finalModelName := strings.TrimSpace(modelData.CustomModelName)
+
+	// Support partial update payloads by falling back to persisted values.
+	if existingModel != nil {
+		if finalBaseURL == "" {
+			finalBaseURL = strings.TrimSpace(existingModel.CustomAPIURL)
+		}
+		if finalModelName == "" {
+			finalModelName = strings.TrimSpace(existingModel.CustomModelName)
+		}
+	}
+
+	if finalBaseURL == "" || finalModelName == "" {
+		return fmt.Errorf("MiniMax requires explicit custom_api_url and custom_model_name when enabled")
+	}
+
+	return nil
+}
+
 // handleGetModelConfigs Get AI model configurations
 func (s *Server) handleGetModelConfigs(c *gin.Context) {
 	userID := c.GetString("user_id")
@@ -1718,15 +1803,7 @@ func (s *Server) handleGetModelConfigs(c *gin.Context) {
 	// If no models in database, return default models
 	if len(models) == 0 {
 		logger.Infof("⚠️ No AI models in database, returning defaults")
-		defaultModels := []SafeModelConfig{
-			{ID: "deepseek", Name: "DeepSeek AI", Provider: "deepseek", Enabled: false},
-			{ID: "qwen", Name: "Qwen AI", Provider: "qwen", Enabled: false},
-			{ID: "openai", Name: "OpenAI", Provider: "openai", Enabled: false},
-			{ID: "claude", Name: "Claude AI", Provider: "claude", Enabled: false},
-			{ID: "gemini", Name: "Gemini AI", Provider: "gemini", Enabled: false},
-			{ID: "grok", Name: "Grok AI", Provider: "grok", Enabled: false},
-			{ID: "kimi", Name: "Kimi AI", Provider: "kimi", Enabled: false},
-		}
+		defaultModels := buildDefaultSafeModels()
 		c.JSON(http.StatusOK, defaultModels)
 		return
 	}
@@ -1807,6 +1884,30 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 			return
 		}
 		logger.Infof("🔓 Decrypted model config data (UserID: %s)", userID)
+	}
+
+	existingModels, err := s.store.AIModel().List(userID)
+	if err != nil {
+		SafeInternalError(c, "Failed to load existing AI model configs", err)
+		return
+	}
+
+	existingByID := make(map[string]*store.AIModel, len(existingModels))
+	existingByProvider := make(map[string]*store.AIModel, len(existingModels))
+	for _, model := range existingModels {
+		existingByID[model.ID] = model
+		existingByProvider[strings.ToLower(strings.TrimSpace(model.Provider))] = model
+	}
+
+	for modelID, modelData := range req.Models {
+		existingModel := existingByID[modelID]
+		if existingModel == nil {
+			existingModel = existingByProvider[normalizeProviderFromModelKey(modelID)]
+		}
+		if err := validateModelConfigUpdate(modelID, modelData, existingModel); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	// Update each model's configuration and track traders that need reload
@@ -3534,15 +3635,7 @@ func (s *Server) initUserDefaultConfigs(userID string) error {
 // handleGetSupportedModels Get list of AI models supported by the system
 func (s *Server) handleGetSupportedModels(c *gin.Context) {
 	// Return static list of supported AI models with default versions
-	supportedModels := []map[string]interface{}{
-		{"id": "deepseek", "name": "DeepSeek", "provider": "deepseek", "defaultModel": "deepseek-chat"},
-		{"id": "qwen", "name": "Qwen", "provider": "qwen", "defaultModel": "qwen3-max"},
-		{"id": "openai", "name": "OpenAI", "provider": "openai", "defaultModel": "gpt-5.1"},
-		{"id": "claude", "name": "Claude", "provider": "claude", "defaultModel": "claude-opus-4-6"},
-		{"id": "gemini", "name": "Google Gemini", "provider": "gemini", "defaultModel": "gemini-3-pro-preview"},
-		{"id": "grok", "name": "Grok (xAI)", "provider": "grok", "defaultModel": "grok-3-latest"},
-		{"id": "kimi", "name": "Kimi (Moonshot)", "provider": "kimi", "defaultModel": "moonshot-v1-auto"},
-	}
+	supportedModels := buildSupportedModels()
 
 	c.JSON(http.StatusOK, supportedModels)
 }

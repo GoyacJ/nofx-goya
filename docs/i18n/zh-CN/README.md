@@ -30,7 +30,7 @@
 
 ### 核心功能
 
-- **多 AI 支持**: 运行 DeepSeek、通义千问、GPT、Claude、Gemini、Grok、Kimi - 随时切换模型
+- **多 AI 支持**: 运行 DeepSeek、通义千问、GPT、Claude、Gemini、Grok、Kimi、MiniMax - 随时切换模型
 - **多交易所**: 在 Binance、Bybit、OKX、Bitget、KuCoin、Gate、Hyperliquid、Aster DEX、Lighter 统一交易
 - **策略工作室**: 可视化策略构建器，配置币种来源、指标和风控参数
 - **AI 竞赛模式**: 多个 AI 交易员实时竞争，并排追踪表现
@@ -99,6 +99,7 @@
 | **Gemini** | ✅ 已支持 | [获取 API Key](https://aistudio.google.com) |
 | **Grok** | ✅ 已支持 | [获取 API Key](https://console.x.ai) |
 | **Kimi** | ✅ 已支持 | [获取 API Key](https://platform.moonshot.cn) |
+| **MiniMax** | ✅ 已支持 | 需手动配置 Base URL 与 Model Name |
 
 ---
 

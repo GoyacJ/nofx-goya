@@ -539,3 +539,61 @@ func TestSimpleHealthRoute(t *testing.T) {
 		t.Fatalf("expected body 'ok', got %q", rec.Body.String())
 	}
 }
+
+func TestBuildDefaultSafeModels_IncludesMiniMax(t *testing.T) {
+	models := buildDefaultSafeModels()
+	found := false
+	for _, model := range models {
+		if model.Provider == "minimax" && model.Name == "MiniMax AI" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected default model list to include MiniMax AI")
+	}
+}
+
+func TestBuildSupportedModels_IncludesMiniMax(t *testing.T) {
+	models := buildSupportedModels()
+	found := false
+	for _, model := range models {
+		if model["provider"] == "minimax" {
+			found = true
+			if model["defaultModel"] != "" {
+				t.Fatalf("expected minimax default model to be empty, got %v", model["defaultModel"])
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected supported model list to include minimax")
+	}
+}
+
+func TestValidateModelConfigUpdate_MiniMaxRules(t *testing.T) {
+	if err := validateModelConfigUpdate("minimax", ModelUpdateConfig{Enabled: true}, nil); err == nil {
+		t.Fatalf("expected minimax validation error when base URL/model are missing")
+	}
+
+	if err := validateModelConfigUpdate("minimax", ModelUpdateConfig{
+		Enabled:         true,
+		CustomAPIURL:    "https://api.minimax.chat/v1",
+		CustomModelName: "MiniMax-Text-01",
+	}, nil); err != nil {
+		t.Fatalf("expected minimax validation to pass with explicit config, got %v", err)
+	}
+
+	existing := &store.AIModel{
+		Provider:        "minimax",
+		CustomAPIURL:    "https://api.minimax.chat/v1",
+		CustomModelName: "MiniMax-Text-01",
+	}
+	if err := validateModelConfigUpdate("user_1_minimax", ModelUpdateConfig{Enabled: true}, existing); err != nil {
+		t.Fatalf("expected minimax validation to pass with existing persisted config, got %v", err)
+	}
+
+	if err := validateModelConfigUpdate("openai", ModelUpdateConfig{Enabled: true}, nil); err != nil {
+		t.Fatalf("non-minimax providers should not be blocked, got %v", err)
+	}
+}

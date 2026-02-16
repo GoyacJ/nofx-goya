@@ -202,6 +202,14 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
 		logger.Infof("🤖 [%s] Using OpenAI", config.Name)
 
+	case "minimax":
+		if strings.TrimSpace(config.CustomAPIURL) == "" || strings.TrimSpace(config.CustomModelName) == "" {
+			return nil, fmt.Errorf("MiniMax requires custom API URL and model name")
+		}
+		mcpClient = mcp.NewMiniMaxClient()
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
+		logger.Infof("🤖 [%s] Using MiniMax AI", config.Name)
+
 	case "qwen":
 		mcpClient = mcp.NewQwenClient()
 		apiKey := config.QwenKey

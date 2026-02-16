@@ -109,7 +109,7 @@ export interface TraderInfo {
 export interface AIModel {
   id: string
   name: string
-  provider: string
+  provider: string // deepseek, qwen, openai, claude, gemini, grok, kimi, minimax, custom
   enabled: boolean
   apiKey?: string
   customApiUrl?: string

@@ -729,7 +729,7 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 	case "deepseek":
 		traderConfig.DeepSeekKey = string(aiModelCfg.APIKey)
 	default:
-		// For other providers (grok, openai, claude, gemini, kimi, etc.), use CustomAPIKey
+		// For other providers (grok, openai, claude, gemini, kimi, minimax, etc.), use CustomAPIKey
 		traderConfig.CustomAPIKey = string(aiModelCfg.APIKey)
 	}
 

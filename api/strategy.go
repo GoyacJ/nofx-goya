@@ -9,6 +9,7 @@ import (
 	"nofx/market"
 	"nofx/mcp"
 	"nofx/store"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -377,9 +378,9 @@ func (s *Server) handlePreviewPrompt(c *gin.Context) {
 	}
 
 	var req struct {
-		Config          store.StrategyConfig `json:"config" binding:"required"`
-		AccountEquity   float64              `json:"account_equity"`
-		PromptVariant   string               `json:"prompt_variant"`
+		Config        store.StrategyConfig `json:"config" binding:"required"`
+		AccountEquity float64              `json:"account_equity"`
+		PromptVariant string               `json:"prompt_variant"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -599,7 +600,13 @@ func (s *Server) runRealAITest(userID, modelID, systemPrompt, userPrompt string)
 
 	// Create AI client
 	var aiClient mcp.AIClient
-	provider := model.Provider
+	provider := strings.ToLower(strings.TrimSpace(model.Provider))
+
+	if provider == "minimax" {
+		if strings.TrimSpace(model.CustomAPIURL) == "" || strings.TrimSpace(model.CustomModelName) == "" {
+			return "", fmt.Errorf("MiniMax requires custom_api_url and custom_model_name")
+		}
+	}
 
 	// Convert EncryptedString to string for API key
 	apiKey := string(model.APIKey)
@@ -625,6 +632,9 @@ func (s *Server) runRealAITest(userID, modelID, systemPrompt, userPrompt string)
 	case "openai":
 		aiClient = mcp.NewOpenAIClient()
 		aiClient.SetAPIKey(apiKey, model.CustomAPIURL, model.CustomModelName)
+	case "minimax":
+		aiClient = mcp.NewMiniMaxClient()
+		aiClient.SetAPIKey(apiKey, model.CustomAPIURL, model.CustomModelName)
 	default:
 		// Use generic client
 		aiClient = mcp.NewClient()
@@ -639,4 +649,3 @@ func (s *Server) runRealAITest(userID, modelID, systemPrompt, userPrompt string)
 
 	return response, nil
 }
-

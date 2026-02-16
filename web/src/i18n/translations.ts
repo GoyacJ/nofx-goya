@@ -582,6 +582,8 @@ export const translations = {
     applyApiKey: 'Apply API Key',
     kimiApiNote:
       'Kimi requires API Key from international site (moonshot.ai), China region keys are not compatible',
+    minimaxApiNote:
+      'MiniMax has no built-in defaults. Please fill both Base URL and Model Name explicitly before saving.',
     leaveBlankForDefaultModel: 'Leave blank to use default model',
     customModelName: 'Model Name (Optional)',
     customModelNamePlaceholder: 'e.g.: deepseek-chat, qwen3-max, gpt-4o',
@@ -878,7 +880,7 @@ export const translations = {
 
     faqSupportedAIModels: 'Which AI models are supported?',
     faqSupportedAIModelsAnswer:
-      'NOFX supports 7+ AI models: DeepSeek (recommended for cost/performance), Alibaba Qwen, OpenAI (GPT-5.2), Anthropic Claude, Google Gemini, xAI Grok, and Kimi (Moonshot). You can also use any OpenAI-compatible API endpoint. Each model has different strengths - DeepSeek is cost-effective, OpenAI models are powerful but expensive, Claude excels at reasoning.',
+      'NOFX supports 8+ AI models: DeepSeek (recommended for cost/performance), Alibaba Qwen, OpenAI (GPT-5.2), Anthropic Claude, Google Gemini, xAI Grok, Kimi (Moonshot), and MiniMax. You can also use any OpenAI-compatible API endpoint. Each model has different strengths - DeepSeek is cost-effective, OpenAI models are powerful but expensive, Claude excels at reasoning.',
 
     faqSystemRequirements: 'What are the system requirements?',
     faqSystemRequirementsAnswer:
@@ -1805,6 +1807,8 @@ export const translations = {
     applyApiKey: '申请 API Key',
     kimiApiNote:
       'Kimi 需要从国际站申请 API Key (moonshot.ai)，中国区 Key 不通用',
+    minimaxApiNote:
+      'MiniMax 不提供内置默认值，保存前必须显式填写 Base URL 和 Model Name。',
     leaveBlankForDefaultModel: '留空使用默认模型名称',
     customModelName: 'Model Name (可选)',
     customModelNamePlaceholder: '例如: deepseek-chat, qwen3-max, gpt-4o',
@@ -2075,7 +2079,7 @@ export const translations = {
 
     faqSupportedAIModels: '支持哪些 AI 模型？',
     faqSupportedAIModelsAnswer:
-      'NOFX 支持 7+ 种 AI 模型：DeepSeek（推荐性价比）、阿里云通义千问、OpenAI（GPT-5.2）、Anthropic Claude、Google Gemini、xAI Grok、Kimi（月之暗面）。您也可以使用任何 OpenAI 兼容的 API 端点。每个模型各有优势 - DeepSeek 性价比高，OpenAI 能力强但贵，Claude 擅长推理。',
+      'NOFX 支持 8+ 种 AI 模型：DeepSeek（推荐性价比）、阿里云通义千问、OpenAI（GPT-5.2）、Anthropic Claude、Google Gemini、xAI Grok、Kimi（月之暗面）、MiniMax。您也可以使用任何 OpenAI 兼容的 API 端点。每个模型各有优势 - DeepSeek 性价比高，OpenAI 能力强但贵，Claude 擅长推理。',
 
     faqSystemRequirements: '系统要求是什么？',
     faqSystemRequirementsAnswer:

@@ -44,6 +44,8 @@ function getModelDisplayName(modelId: string): string {
       return 'Qwen'
     case 'claude':
       return 'Claude'
+    case 'minimax':
+      return 'MiniMax'
     default:
       return modelId.toUpperCase()
   }
@@ -58,7 +60,7 @@ function getShortName(fullName: string): string {
 // AI Provider configuration - default models and API links
 const AI_PROVIDER_CONFIG: Record<string, {
   defaultModel: string
-  apiUrl: string
+  apiUrl?: string
   apiName: string
 }> = {
   deepseek: {
@@ -95,6 +97,10 @@ const AI_PROVIDER_CONFIG: Record<string, {
     defaultModel: 'moonshot-v1-auto',
     apiUrl: 'https://platform.moonshot.ai/console/api-keys',
     apiName: 'Moonshot',
+  },
+  minimax: {
+    defaultModel: '',
+    apiName: 'MiniMax',
   },
 }
 
@@ -1546,6 +1552,10 @@ function ModelConfigModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (selectedModel?.provider === 'minimax' && (!baseUrl.trim() || !modelName.trim())) {
+      toast.error(t('minimaxApiNote', language))
+      return
+    }
     if (!selectedModelId || !apiKey.trim()) return
     onSave(selectedModelId, apiKey.trim(), baseUrl.trim() || undefined, modelName.trim() || undefined)
   }
@@ -1553,6 +1563,11 @@ function ModelConfigModal({
   const availableModels = allModels || []
   const configuredIds = new Set(configuredModels?.map(m => m.id) || [])
   const stepLabels = language === 'zh' ? ['选择模型', '配置 API'] : ['Select Model', 'Configure API']
+  const selectedProviderConfig = selectedModel ? AI_PROVIDER_CONFIG[selectedModel.provider] : undefined
+  const isMiniMax = selectedModel?.provider === 'minimax'
+  const defaultModelLabel = selectedModel
+    ? selectedProviderConfig?.defaultModel || (isMiniMax ? 'Custom Model Required' : selectedModel.id)
+    : ''
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto backdrop-blur-sm">
@@ -1638,12 +1653,12 @@ function ModelConfigModal({
                     {getShortName(selectedModel.name)}
                   </div>
                   <div className="text-xs" style={{ color: '#848E9C' }}>
-                    {selectedModel.provider} • {AI_PROVIDER_CONFIG[selectedModel.provider]?.defaultModel || selectedModel.id}
+                    {selectedModel.provider} • {defaultModelLabel}
                   </div>
                 </div>
-                {AI_PROVIDER_CONFIG[selectedModel.provider] && (
+                {selectedProviderConfig?.apiUrl && (
                   <a
-                    href={AI_PROVIDER_CONFIG[selectedModel.provider].apiUrl}
+                    href={selectedProviderConfig.apiUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all hover:scale-105"
@@ -1664,6 +1679,18 @@ function ModelConfigModal({
                     <span style={{ fontSize: '16px' }}>⚠️</span>
                     <div className="text-sm" style={{ color: '#F6465D' }}>
                       {t('kimiApiNote', language)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MiniMax Warning */}
+              {isMiniMax && (
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.35)' }}>
+                  <div className="flex items-start gap-2">
+                    <span style={{ fontSize: '16px' }}>⚠️</span>
+                    <div className="text-sm" style={{ color: '#F59E0B' }}>
+                      {t('minimaxApiNote', language)}
                     </div>
                   </div>
                 </div>
@@ -1694,7 +1721,7 @@ function ModelConfigModal({
                   <svg className="w-4 h-4" style={{ color: '#A78BFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
-                  {t('customBaseURL', language)}
+                  {t('customBaseURL', language)}{isMiniMax ? ' *' : ''}
                 </label>
                 <input
                   type="url"
@@ -1703,9 +1730,10 @@ function ModelConfigModal({
                   placeholder={t('customBaseURLPlaceholder', language)}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                  required={isMiniMax}
                 />
                 <div className="text-xs" style={{ color: '#848E9C' }}>
-                  {t('leaveBlankForDefault', language)}
+                  {isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefault', language)}
                 </div>
               </div>
 
@@ -1715,7 +1743,7 @@ function ModelConfigModal({
                   <svg className="w-4 h-4" style={{ color: '#A78BFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                   </svg>
-                  {t('customModelName', language)}
+                  {t('customModelName', language)}{isMiniMax ? ' *' : ''}
                 </label>
                 <input
                   type="text"
@@ -1724,9 +1752,10 @@ function ModelConfigModal({
                   placeholder={t('customModelNamePlaceholder', language)}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                  required={isMiniMax}
                 />
                 <div className="text-xs" style={{ color: '#848E9C' }}>
-                  {t('leaveBlankForDefaultModel', language)}
+                  {isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefaultModel', language)}
                 </div>
               </div>
 
