@@ -107,7 +107,7 @@ To use NOFX, you'll need:
 | <img src="web/public/icons/gemini.svg" width="20" height="20" style="vertical-align: middle;"/> **Gemini** | ✅ | [Get API Key](https://aistudio.google.com) |
 | <img src="web/public/icons/grok.svg" width="20" height="20" style="vertical-align: middle;"/> **Grok** | ✅ | [Get API Key](https://console.x.ai) |
 | <img src="web/public/icons/kimi.svg" width="20" height="20" style="vertical-align: middle;"/> **Kimi** | ✅ | [Get API Key](https://platform.moonshot.cn) |
-| <img src="web/public/icons/minimax.svg" width="20" height="20" style="vertical-align: middle;"/> **MiniMax** | ✅ | Default `https://api.minimaxi.com/v1` (`MiniMax-M2.5`) |
+| <img src="web/public/icons/minimax.svg" width="20" height="20" style="vertical-align: middle;"/> **MiniMax** | ✅ | Default `https://api.minimaxi.com/anthropic` (`MiniMax-M2.5`) |
 
 ---
 

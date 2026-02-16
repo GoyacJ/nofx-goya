@@ -6,7 +6,7 @@ import (
 
 const (
 	ProviderMiniMax       = "minimax"
-	DefaultMiniMaxBaseURL = "https://api.minimaxi.com/v1"
+	DefaultMiniMaxBaseURL = "https://api.minimaxi.com/anthropic"
 	DefaultMiniMaxModel   = "MiniMax-M2.5"
 )
 

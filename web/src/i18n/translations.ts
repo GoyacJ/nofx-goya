@@ -572,7 +572,7 @@ export const translations = {
     customBaseURL: 'Base URL (Optional)',
     customBaseURLPlaceholder:
       'Custom API base URL, e.g.: https://api.openai.com/v1',
-    minimaxBaseURLPlaceholder: 'Default: https://api.minimaxi.com/v1',
+    minimaxBaseURLPlaceholder: 'Default: https://api.minimaxi.com/anthropic',
     leaveBlankForDefault: 'Leave blank to use default API address',
     modelConfigInfo1:
       '• For official API, only API Key is required, leave other fields blank',
@@ -584,7 +584,7 @@ export const translations = {
     kimiApiNote:
       'Kimi requires API Key from international site (moonshot.ai), China region keys are not compatible',
     minimaxApiNote:
-      'MiniMax defaults to https://api.minimaxi.com/v1 and model MiniMax-M2.5. Fill Base URL / Model Name only when overriding.',
+      'MiniMax defaults to https://api.minimaxi.com/anthropic and model MiniMax-M2.5. Fill Base URL / Model Name only when overriding.',
     leaveBlankForDefaultModel: 'Leave blank to use default model',
     customModelName: 'Model Name (Optional)',
     customModelNamePlaceholder: 'e.g.: deepseek-chat, qwen3-max, gpt-4o',
@@ -1800,7 +1800,7 @@ export const translations = {
     pleaseSelectModel: '请选择模型',
     customBaseURL: 'Base URL (可选)',
     customBaseURLPlaceholder: '自定义API基础URL，如: https://api.openai.com/v1',
-    minimaxBaseURLPlaceholder: '默认: https://api.minimaxi.com/v1',
+    minimaxBaseURLPlaceholder: '默认: https://api.minimaxi.com/anthropic',
     leaveBlankForDefault: '留空则使用默认API地址',
     modelConfigInfo1: '• 使用官方 API 时，只需填写 API Key，其他字段留空即可',
     modelConfigInfo2:
@@ -1811,7 +1811,7 @@ export const translations = {
     kimiApiNote:
       'Kimi 需要从国际站申请 API Key (moonshot.ai)，中国区 Key 不通用',
     minimaxApiNote:
-      'MiniMax 默认使用 https://api.minimaxi.com/v1 和模型 MiniMax-M2.5，只有需要覆盖默认值时才填写 Base URL / Model Name。',
+      'MiniMax 默认使用 https://api.minimaxi.com/anthropic 和模型 MiniMax-M2.5，只有需要覆盖默认值时才填写 Base URL / Model Name。',
     leaveBlankForDefaultModel: '留空使用默认模型名称',
     customModelName: 'Model Name (可选)',
     customModelNamePlaceholder: '例如: deepseek-chat, qwen3-max, gpt-4o',
