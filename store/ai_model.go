@@ -209,8 +209,6 @@ func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPI
 			name = "Qwen AI"
 		} else if provider == "minimax" {
 			name = "MiniMax AI"
-		} else if provider == "openclaw" {
-			name = "OpenClaw AI"
 		} else {
 			name = provider + " AI"
 		}

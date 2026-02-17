@@ -175,13 +175,6 @@ func (s *Server) resolveModelTestInput(userID string, req TestModelConfigRequest
 		if modelName == "" {
 			modelName = mcp.DefaultMiniMaxModel
 		}
-	case "openclaw":
-		if baseURL == "" {
-			return "", "", "", "", fmt.Errorf("OpenClaw requires explicit base URL")
-		}
-		if modelName == "" {
-			return "", "", "", "", fmt.Errorf("OpenClaw requires explicit model name")
-		}
 	}
 
 	return provider, apiKey, baseURL, modelName, nil
@@ -221,10 +214,6 @@ func buildAIClientForProvider(provider, apiKey, customURL, customModel string) (
 		client := mcp.NewMiniMaxClient()
 		client.SetAPIKey(apiKey, customURL, customModel)
 		return client, nil
-	case "openclaw":
-		client := mcp.NewOpenClawClient()
-		client.SetAPIKey(apiKey, customURL, customModel)
-		return client, nil
 	case mcp.ProviderCustom, "":
 		client := mcp.NewClient()
 		client.SetAPIKey(apiKey, customURL, customModel)
@@ -251,8 +240,6 @@ func extractAIClientConfig(client mcp.AIClient, fallbackBaseURL, fallbackModel s
 	case *mcp.KimiClient:
 		return c.BaseURL, c.Model
 	case *mcp.MiniMaxClient:
-		return c.BaseURL, c.Model
-	case *mcp.OpenClawClient:
 		return c.BaseURL, c.Model
 	case *mcp.Client:
 		return c.BaseURL, c.Model

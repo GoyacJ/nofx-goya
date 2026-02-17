@@ -572,37 +572,6 @@ func TestBuildSupportedModels_IncludesMiniMax(t *testing.T) {
 	}
 }
 
-func TestBuildDefaultSafeModels_IncludesOpenClaw(t *testing.T) {
-	models := buildDefaultSafeModels()
-	found := false
-	for _, model := range models {
-		if model.Provider == "openclaw" && model.Name == "OpenClaw AI" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected default model list to include OpenClaw AI")
-	}
-}
-
-func TestBuildSupportedModels_IncludesOpenClaw(t *testing.T) {
-	models := buildSupportedModels()
-	found := false
-	for _, model := range models {
-		if model["provider"] == "openclaw" {
-			found = true
-			if model["defaultModel"] != "" {
-				t.Fatalf("expected openclaw default model to be empty, got %v", model["defaultModel"])
-			}
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected supported model list to include openclaw")
-	}
-}
-
 func TestValidateModelConfigUpdate_MiniMaxRules(t *testing.T) {
 	if err := validateModelConfigUpdate("minimax", ModelUpdateConfig{Enabled: true}, nil); err != nil {
 		t.Fatalf("expected minimax validation to pass with defaults, got %v", err)
@@ -627,33 +596,5 @@ func TestValidateModelConfigUpdate_MiniMaxRules(t *testing.T) {
 
 	if err := validateModelConfigUpdate("openai", ModelUpdateConfig{Enabled: true}, nil); err != nil {
 		t.Fatalf("non-minimax providers should not be blocked, got %v", err)
-	}
-}
-
-func TestValidateModelConfigUpdate_OpenClawRules(t *testing.T) {
-	if err := validateModelConfigUpdate("openclaw", ModelUpdateConfig{
-		Enabled: true,
-		APIKey:  "test-key",
-	}, nil); err == nil {
-		t.Fatalf("expected openclaw validation failure without base url and model")
-	}
-
-	if err := validateModelConfigUpdate("openclaw", ModelUpdateConfig{
-		Enabled:         true,
-		APIKey:          "test-key",
-		CustomAPIURL:    "https://gateway.example.com",
-		CustomModelName: "openclaw/model-v1",
-	}, nil); err != nil {
-		t.Fatalf("expected openclaw validation success, got %v", err)
-	}
-
-	existing := &store.AIModel{
-		Provider:        "openclaw",
-		APIKey:          "persisted-key",
-		CustomAPIURL:    "https://gateway.example.com",
-		CustomModelName: "openclaw/model-v1",
-	}
-	if err := validateModelConfigUpdate("user_1_openclaw", ModelUpdateConfig{Enabled: true}, existing); err != nil {
-		t.Fatalf("expected openclaw validation to pass with existing persisted config, got %v", err)
 	}
 }

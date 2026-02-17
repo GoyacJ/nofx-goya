@@ -37,7 +37,7 @@
 
 ### Core Features
 
-- **Multi-AI Support**: Run DeepSeek, Qwen, GPT, Claude, Gemini, Grok, Kimi, MiniMax, OpenClaw - switch models anytime
+- **Multi-AI Support**: Run DeepSeek, Qwen, GPT, Claude, Gemini, Grok, Kimi, MiniMax - switch models anytime
 - **Multi-Exchange**: Trade on Binance, Bybit, OKX, Bitget, KuCoin, Gate, Hyperliquid, Aster DEX, Lighter from one platform
 - **Strategy Studio**: Visual strategy builder with coin sources, indicators, and risk controls
 - **AI Debate Arena**: Multiple AI models debate trading decisions with different roles (Bull, Bear, Analyst)
@@ -108,8 +108,6 @@ To use NOFX, you'll need:
 | <img src="web/public/icons/grok.svg" width="20" height="20" style="vertical-align: middle;"/> **Grok** | ✅ | [Get API Key](https://console.x.ai) |
 | <img src="web/public/icons/kimi.svg" width="20" height="20" style="vertical-align: middle;"/> **Kimi** | ✅ | [Get API Key](https://platform.moonshot.cn) |
 | <img src="web/public/icons/minimax.svg" width="20" height="20" style="vertical-align: middle;"/> **MiniMax** | ✅ | Default `https://api.minimaxi.com/v1` (`MiniMax-M2.5`) |
-| <img src="web/public/icons/openclaw.svg" width="20" height="20" style="vertical-align: middle;"/> **OpenClaw** | ✅ | Requires explicit gateway URL + model |
-
 ---
 
 ## Screenshots

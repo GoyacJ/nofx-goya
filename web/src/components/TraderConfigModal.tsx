@@ -323,6 +323,7 @@ export function TraderConfigModal({
                   })()}
                 </div>
               </div>
+
             </div>
           </div>
 

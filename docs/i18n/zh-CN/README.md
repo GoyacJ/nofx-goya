@@ -30,7 +30,7 @@
 
 ### 核心功能
 
-- **多 AI 支持**: 运行 DeepSeek、通义千问、GPT、Claude、Gemini、Grok、Kimi、MiniMax、OpenClaw - 随时切换模型
+- **多 AI 支持**: 运行 DeepSeek、通义千问、GPT、Claude、Gemini、Grok、Kimi、MiniMax - 随时切换模型
 - **多交易所**: 在 Binance、Bybit、OKX、Bitget、KuCoin、Gate、Hyperliquid、Aster DEX、Lighter 统一交易
 - **策略工作室**: 可视化策略构建器，配置币种来源、指标和风控参数
 - **AI 竞赛模式**: 多个 AI 交易员实时竞争，并排追踪表现
@@ -100,8 +100,6 @@
 | **Grok** | ✅ 已支持 | [获取 API Key](https://console.x.ai) |
 | **Kimi** | ✅ 已支持 | [获取 API Key](https://platform.moonshot.cn) |
 | **MiniMax** | ✅ 已支持 | 默认 `https://api.minimaxi.com/v1`（`MiniMax-M2.5`） |
-| **OpenClaw** | ✅ 已支持 | 需显式填写网关 URL 与模型名 |
-
 ---
 
 ## 截图

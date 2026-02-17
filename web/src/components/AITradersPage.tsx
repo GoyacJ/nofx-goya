@@ -46,8 +46,6 @@ function getModelDisplayName(modelId: string): string {
       return 'Claude'
     case 'minimax':
       return 'MiniMax'
-    case 'openclaw':
-      return 'OpenClaw'
     default:
       return modelId.toUpperCase()
   }
@@ -103,10 +101,6 @@ const AI_PROVIDER_CONFIG: Record<string, {
   minimax: {
     defaultModel: 'MiniMax-M2.5',
     apiName: 'MiniMax',
-  },
-  openclaw: {
-    defaultModel: '',
-    apiName: 'OpenClaw',
   },
 }
 
@@ -575,7 +569,6 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         apiKey: '',
         customApiUrl: '',
         customModelName: '',
-        webhookSecret: '',
         enabled: false,
       }),
       buildRequest: (models) => ({
@@ -587,7 +580,6 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               api_key: model.apiKey || '',
               custom_api_url: model.customApiUrl || '',
               custom_model_name: model.customModelName || '',
-              webhook_secret: model.webhookSecret || '',
             },
           ])
         ),
@@ -610,8 +602,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     modelId: string,
     apiKey: string,
     customApiUrl?: string,
-    customModelName?: string,
-    webhookSecret?: string
+    customModelName?: string
   ) => {
     try {
       // 创建或更新用户的模型配置
@@ -626,18 +617,6 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         return
       }
 
-      const targetProvider = (modelToUpdate.provider || '').toLowerCase()
-      if (targetProvider === 'openclaw') {
-        if (!customApiUrl || !customApiUrl.trim()) {
-          toast.error(t('openclawBaseURLRequired', language))
-          return
-        }
-        if (!customModelName || !customModelName.trim()) {
-          toast.error(t('openclawModelRequired', language))
-          return
-        }
-      }
-
       if (existingModel) {
         // 更新现有配置
         updatedModels =
@@ -648,7 +627,6 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
                 apiKey,
                 customApiUrl: customApiUrl || '',
                 customModelName: customModelName || '',
-                webhookSecret: webhookSecret || '',
                 enabled: true,
               }
               : m
@@ -660,7 +638,6 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           apiKey,
           customApiUrl: customApiUrl || '',
           customModelName: customModelName || '',
-          webhookSecret: webhookSecret || '',
           enabled: true,
         }
         updatedModels = [...(allModels || []), newModel]
@@ -675,7 +652,6 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               api_key: model.apiKey || '',
               custom_api_url: model.customApiUrl || '',
               custom_model_name: model.customModelName || '',
-              webhook_secret: model.webhookSecret || '',
             },
           ])
         ),
@@ -1470,6 +1446,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
             language={language}
           />
         )}
+
       </div>
     </DeepVoidBackground>
   )
@@ -1586,8 +1563,7 @@ function ModelConfigModal({
     modelId: string,
     apiKey: string,
     baseUrl?: string,
-    modelName?: string,
-    webhookSecret?: string
+    modelName?: string
   ) => void
   onTest: (
     modelId: string,
@@ -1604,7 +1580,6 @@ function ModelConfigModal({
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [modelName, setModelName] = useState('')
-  const [webhookSecret, setWebhookSecret] = useState('')
   const [isTesting, setIsTesting] = useState(false)
 
   const selectedModel = editingModelId
@@ -1616,7 +1591,6 @@ function ModelConfigModal({
       setApiKey(selectedModel.apiKey || '')
       setBaseUrl(selectedModel.customApiUrl || '')
       setModelName(selectedModel.customModelName || '')
-      setWebhookSecret('')
     }
   }, [editingModelId, selectedModel])
 
@@ -1642,8 +1616,7 @@ function ModelConfigModal({
       selectedModelId,
       apiKey.trim(),
       baseUrl.trim() || undefined,
-      modelName.trim() || undefined,
-      webhookSecret.trim() || undefined,
+      modelName.trim() || undefined
     )
   }
 
@@ -1669,9 +1642,8 @@ function ModelConfigModal({
   const stepLabels = language === 'zh' ? ['选择模型', '配置 API'] : ['Select Model', 'Configure API']
   const selectedProviderConfig = selectedModel ? AI_PROVIDER_CONFIG[selectedModel.provider] : undefined
   const isMiniMax = selectedModel?.provider === 'minimax'
-  const isOpenClaw = selectedModel?.provider === 'openclaw'
   const requiresAPIKey = !editingModelId
-  const requiresExplicitEndpoint = isOpenClaw
+  const requiresExplicitEndpoint = false
   const defaultModelLabel = selectedModel
     ? selectedProviderConfig?.defaultModel || selectedModel.id
     : ''
@@ -1809,43 +1781,6 @@ function ModelConfigModal({
                 </div>
               )}
 
-              {/* OpenClaw Warning */}
-              {isOpenClaw && (
-                <div className="p-4 rounded-xl" style={{ background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.35)' }}>
-                  <div className="flex items-start gap-2">
-                    <span style={{ fontSize: '16px' }}>⚠️</span>
-                    <div className="text-sm" style={{ color: '#38BDF8' }}>
-                      {t('openclawApiNote', language)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* OpenClaw Webhook Secret */}
-              {isOpenClaw && (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
-                    <svg className="w-4 h-4" style={{ color: '#38BDF8' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0-1.657 1.567-3 3.5-3s3.5 1.343 3.5 3v2a2 2 0 002 2h.5a1.5 1.5 0 010 3H2.5a1.5 1.5 0 010-3H3a2 2 0 002-2v-2c0-1.657 1.567-3 3.5-3S12 9.343 12 11z" />
-                    </svg>
-                    {t('openclawWebhookSecret', language)}
-                  </label>
-                  <input
-                    type="password"
-                    value={webhookSecret}
-                    onChange={(e) => setWebhookSecret(e.target.value)}
-                    placeholder={t('openclawWebhookSecretPlaceholder', language)}
-                    className="w-full px-4 py-3 rounded-xl"
-                    style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
-                  />
-                  <div className="text-xs" style={{ color: '#848E9C' }}>
-                    {selectedModel?.webhookSecretConfigured
-                      ? t('openclawWebhookSecretKeepHint', language)
-                      : t('openclawWebhookSecretHint', language)}
-                  </div>
-                </div>
-              )}
-
               {/* API Key */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
@@ -1882,13 +1817,13 @@ function ModelConfigModal({
                   type="url"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder={isOpenClaw ? t('openclawBaseURLPlaceholder', language) : (isMiniMax ? t('minimaxBaseURLPlaceholder', language) : t('customBaseURLPlaceholder', language))}
+                  placeholder={isMiniMax ? t('minimaxBaseURLPlaceholder', language) : t('customBaseURLPlaceholder', language)}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
                   required={requiresExplicitEndpoint}
                 />
                 <div className="text-xs" style={{ color: '#848E9C' }}>
-                  {isOpenClaw ? t('openclawApiNote', language) : (isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefault', language))}
+                  {isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefault', language)}
                 </div>
               </div>
 
@@ -1904,13 +1839,13 @@ function ModelConfigModal({
                   type="text"
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
-                  placeholder={isOpenClaw ? t('openclawModelNamePlaceholder', language) : (isMiniMax ? t('minimaxModelNamePlaceholder', language) : t('customModelNamePlaceholder', language))}
+                  placeholder={isMiniMax ? t('minimaxModelNamePlaceholder', language) : t('customModelNamePlaceholder', language)}
                   className="w-full px-4 py-3 rounded-xl"
                   style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
                   required={requiresExplicitEndpoint}
                 />
                 <div className="text-xs" style={{ color: '#848E9C' }}>
-                  {isOpenClaw ? t('openclawApiNote', language) : (isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefaultModel', language))}
+                  {isMiniMax ? t('minimaxApiNote', language) : t('leaveBlankForDefaultModel', language)}
                 </div>
               </div>
 

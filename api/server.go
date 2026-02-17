@@ -146,7 +146,6 @@ func (s *Server) setupRoutes() {
 
 		// Public strategy market (no authentication required)
 		api.GET("/strategies/public", s.handlePublicStrategies)
-		api.POST("/openclaw/webhooks/events", s.handleOpenClawWebhookEvent)
 
 		// Authentication related routes (no authentication required)
 		api.POST("/register", s.handleRegister)
@@ -233,10 +232,6 @@ func (s *Server) setupRoutes() {
 			backtest := protected.Group("/backtest")
 			s.registerBacktestRoutes(backtest)
 
-			// OpenClaw governance routes
-			protected.GET("/openclaw/approvals", s.handleListOpenClawApprovals)
-			protected.POST("/openclaw/approvals/:id/approve", s.handleApproveOpenClawApproval)
-			protected.POST("/openclaw/approvals/:id/reject", s.handleRejectOpenClawApproval)
 		}
 	}
 
@@ -1732,7 +1727,6 @@ func buildDefaultSafeModels() []SafeModelConfig {
 		{ID: "grok", Name: "Grok AI", Provider: "grok", Enabled: false},
 		{ID: "kimi", Name: "Kimi AI", Provider: "kimi", Enabled: false},
 		{ID: "minimax", Name: "MiniMax AI", Provider: "minimax", Enabled: false},
-		{ID: "openclaw", Name: "OpenClaw AI", Provider: "openclaw", Enabled: false},
 	}
 }
 
@@ -1746,7 +1740,6 @@ func buildSupportedModels() []map[string]interface{} {
 		{"id": "grok", "name": "Grok (xAI)", "provider": "grok", "defaultModel": "grok-3-latest"},
 		{"id": "kimi", "name": "Kimi (Moonshot)", "provider": "kimi", "defaultModel": "moonshot-v1-auto"},
 		{"id": "minimax", "name": "MiniMax", "provider": "minimax", "defaultModel": mcp.DefaultMiniMaxModel},
-		{"id": "openclaw", "name": "OpenClaw", "provider": "openclaw", "defaultModel": ""},
 	}
 }
 
@@ -1765,7 +1758,6 @@ func normalizeProviderFromModelKey(modelKey string) string {
 		"grok":     {},
 		"kimi":     {},
 		"minimax":  {},
-		"openclaw": {},
 		"custom":   {},
 	}
 	if _, ok := knownProviders[key]; ok {
@@ -1815,16 +1807,6 @@ func validateModelConfigUpdate(modelKey string, modelData ModelUpdateConfig, exi
 		}
 		if finalBaseURL == "" || finalModelName == "" {
 			return fmt.Errorf("MiniMax requires valid base URL and model")
-		}
-	case "openclaw":
-		if finalAPIKey == "" {
-			return fmt.Errorf("OpenClaw requires API key")
-		}
-		if finalBaseURL == "" {
-			return fmt.Errorf("OpenClaw requires explicit base URL")
-		}
-		if finalModelName == "" {
-			return fmt.Errorf("OpenClaw requires explicit model name")
 		}
 	}
 

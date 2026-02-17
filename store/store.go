@@ -29,7 +29,6 @@ type Store struct {
 	equity   *EquityStore
 	order    *OrderStore
 	grid     *GridStore
-	openclaw *OpenClawStore
 
 	mu sync.RWMutex
 }
@@ -160,9 +159,6 @@ func (s *Store) initTables() error {
 	}
 	if err := s.Grid().InitTables(); err != nil {
 		return fmt.Errorf("failed to initialize grid tables: %w", err)
-	}
-	if err := s.OpenClaw().initTables(); err != nil {
-		return fmt.Errorf("failed to initialize openclaw tables: %w", err)
 	}
 	return nil
 }
@@ -295,16 +291,6 @@ func (s *Store) Grid() *GridStore {
 		s.grid = NewGridStore(s.gdb)
 	}
 	return s.grid
-}
-
-// OpenClaw gets OpenClaw governance storage
-func (s *Store) OpenClaw() *OpenClawStore {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.openclaw == nil {
-		s.openclaw = NewOpenClawStore(s.gdb)
-	}
-	return s.openclaw
 }
 
 // Close closes database connection

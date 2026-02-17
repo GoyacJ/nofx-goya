@@ -175,23 +175,11 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 			config.AIModel = "deepseek"
 		}
 	}
-
 	// Initialize AI client based on provider
 	var mcpClient mcp.AIClient
 	aiModel := config.AIModel
 	if config.UseQwen && aiModel == "" {
 		aiModel = "qwen"
-	}
-	if aiModel == "openclaw" {
-		if strings.TrimSpace(config.CustomAPIKey) == "" {
-			return nil, fmt.Errorf("openclaw requires api key")
-		}
-		if strings.TrimSpace(config.CustomAPIURL) == "" {
-			return nil, fmt.Errorf("openclaw requires base URL")
-		}
-		if strings.TrimSpace(config.CustomModelName) == "" {
-			return nil, fmt.Errorf("openclaw requires model name")
-		}
 	}
 
 	switch aiModel {
@@ -219,11 +207,6 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		mcpClient = mcp.NewOpenAIClient()
 		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
 		logger.Infof("🤖 [%s] Using OpenAI", config.Name)
-
-	case "openclaw":
-		mcpClient = mcp.NewOpenClawClient()
-		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
-		logger.Infof("🤖 [%s] Using OpenClaw gateway", config.Name)
 
 	case "minimax":
 		mcpClient = mcp.NewMiniMaxClient()

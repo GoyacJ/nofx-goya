@@ -109,13 +109,11 @@ export interface TraderInfo {
 export interface AIModel {
   id: string
   name: string
-  provider: string // deepseek, qwen, openai, claude, gemini, grok, kimi, minimax, openclaw, custom
+  provider: string // deepseek, qwen, openai, claude, gemini, grok, kimi, minimax, custom
   enabled: boolean
   apiKey?: string
   customApiUrl?: string
   customModelName?: string
-  webhookSecret?: string
-  webhookSecretConfigured?: boolean
 }
 
 export interface Exchange {
@@ -195,7 +193,6 @@ export interface UpdateModelConfigRequest {
       api_key: string
       custom_api_url?: string
       custom_model_name?: string
-      webhook_secret?: string
     }
   }
 }
