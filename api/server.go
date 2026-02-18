@@ -16,12 +16,14 @@ import (
 	"nofx/market"
 	"nofx/mcp"
 	"nofx/provider/alpaca"
+	ashareprovider "nofx/provider/ashare"
 	"nofx/provider/coinank/coinank_api"
 	"nofx/provider/coinank/coinank_enum"
 	"nofx/provider/hyperliquid"
 	"nofx/provider/twelvedata"
 	"nofx/store"
 	"nofx/trader"
+	asharepapertrader "nofx/trader/asharepaper"
 	"nofx/trader/aster"
 	"nofx/trader/binance"
 	"nofx/trader/bitget"
@@ -227,6 +229,8 @@ func (s *Server) setupRoutes() {
 			protected.GET("/statistics", s.handleStatistics)
 			protected.GET("/qmt/klines", s.handleQMTKlines)
 			protected.GET("/qmt/symbols", s.handleQMTSymbols)
+			protected.GET("/ashare/klines", s.handleAShareKlines)
+			protected.GET("/ashare/symbols", s.handleAShareSymbols)
 
 			// Backtest routes
 			backtest := protected.Group("/backtest")
@@ -569,7 +573,7 @@ type ExchangeConfig struct {
 // SafeExchangeConfig Safe exchange configuration structure (does not contain sensitive information)
 type SafeExchangeConfig struct {
 	ID                    string `json:"id"`            // UUID
-	ExchangeType          string `json:"exchange_type"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt"
+	ExchangeType          string `json:"exchange_type"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt", "ashare"
 	AccountName           string `json:"account_name"`  // User-defined account name
 	Name                  string `json:"name"`          // Display name
 	Type                  string `json:"type"`          // "cex" or "dex" or "stock"
@@ -582,6 +586,9 @@ type SafeExchangeConfig struct {
 	QMTGatewayURL         string `json:"qmtGatewayUrl"`         // QMT gateway URL (not sensitive)
 	QMTAccountID          string `json:"qmtAccountId"`          // QMT account ID (not sensitive)
 	QMTMarket             string `json:"qmtMarket"`             // QMT market, default CN-A (not sensitive)
+	AShareMarket          string `json:"ashareMarket"`          // A-share market, default CN-A (not sensitive)
+	AShareDataMode        string `json:"ashareDataMode"`        // A-share data mode (not sensitive)
+	AShareWatchlist       string `json:"ashareWatchlist"`       // A-share watchlist (not sensitive)
 }
 
 type UpdateModelConfigRequest struct {
@@ -615,6 +622,10 @@ type UpdateExchangeConfigRequest struct {
 		QMTAccountID            string `json:"qmt_account_id"`
 		QMTGatewayToken         string `json:"qmt_gateway_token"`
 		QMTMarket               string `json:"qmt_market"`
+		AShareMarket            string `json:"ashare_market"`
+		AShareTushareToken      string `json:"ashare_tushare_token"`
+		AShareDataMode          string `json:"ashare_data_mode"`
+		AShareWatchlist         string `json:"ashare_watchlist"`
 	} `json:"exchanges"`
 }
 
@@ -1314,8 +1325,8 @@ func (s *Server) handleClosePosition(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Exchange not configured or not enabled"})
 		return
 	}
-	if strings.EqualFold(exchangeCfg.ExchangeType, "qmt") && strings.EqualFold(req.Side, "SHORT") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "QMT cash account does not support short positions"})
+	if (strings.EqualFold(exchangeCfg.ExchangeType, "qmt") || strings.EqualFold(exchangeCfg.ExchangeType, "ashare")) && strings.EqualFold(req.Side, "SHORT") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "A-share cash account does not support short positions"})
 		return
 	}
 	normalizedSymbol := market.NormalizeByExchange(exchangeCfg.ExchangeType, req.Symbol)
@@ -1599,7 +1610,7 @@ func getSideFromAction(action string) string {
 }
 
 func commissionAssetForExchange(exchangeType string) string {
-	if strings.EqualFold(exchangeType, "qmt") {
+	if strings.EqualFold(exchangeType, "qmt") || strings.EqualFold(exchangeType, "ashare") {
 		return "CNY"
 	}
 	return "USDT"
@@ -1682,6 +1693,22 @@ func (s *Server) buildTempTraderFromExchange(exchangeCfg *store.Exchange, userID
 			marketName = "CN-A"
 		}
 		return qmttrader.NewQMTTrader(exchangeCfg.QMTGatewayURL, exchangeCfg.QMTAccountID, string(exchangeCfg.QMTGatewayToken), marketName)
+	case "ashare":
+		marketName := exchangeCfg.AShareMarket
+		if marketName == "" {
+			marketName = "CN-A"
+		}
+		dataMode := exchangeCfg.AShareDataMode
+		if dataMode == "" {
+			dataMode = ashareprovider.DefaultDataMode
+		}
+		return asharepapertrader.NewASharePaperTrader(
+			string(exchangeCfg.AShareTushareToken),
+			dataMode,
+			exchangeCfg.AShareWatchlist,
+			marketName,
+			exchangeCfg.ID,
+		)
 	default:
 		return nil, fmt.Errorf("unsupported exchange type: %s", exchangeCfg.ExchangeType)
 	}
@@ -1696,7 +1723,8 @@ func (s *Server) validateExchangeStrategyCompatibility(userID, exchangeID, strat
 	if err != nil {
 		return fmt.Errorf("failed to load exchange config: %w", err)
 	}
-	if exchangeCfg.ExchangeType != "qmt" {
+	exchangeType := strings.ToLower(strings.TrimSpace(exchangeCfg.ExchangeType))
+	if exchangeType != "qmt" && exchangeType != "ashare" {
 		return nil
 	}
 
@@ -1709,10 +1737,10 @@ func (s *Server) validateExchangeStrategyCompatibility(userID, exchangeID, strat
 		return fmt.Errorf("failed to parse strategy config: %w", err)
 	}
 	if cfg.CoinSource.SourceType != "static" {
-		return fmt.Errorf("qmt only supports coin_source.source_type=static")
+		return fmt.Errorf("%s only supports coin_source.source_type=static", exchangeType)
 	}
 	if cfg.CoinSource.UseAI500 || cfg.CoinSource.UseOITop || cfg.CoinSource.UseOILow {
-		return fmt.Errorf("qmt does not support ai500/oi_top/oi_low sources")
+		return fmt.Errorf("%s does not support ai500/oi_top/oi_low sources", exchangeType)
 	}
 	return nil
 }
@@ -2013,6 +2041,9 @@ func (s *Server) handleGetExchangeConfigs(c *gin.Context) {
 			QMTGatewayURL:         exchange.QMTGatewayURL,
 			QMTAccountID:          exchange.QMTAccountID,
 			QMTMarket:             exchange.QMTMarket,
+			AShareMarket:          exchange.AShareMarket,
+			AShareDataMode:        exchange.AShareDataMode,
+			AShareWatchlist:       exchange.AShareWatchlist,
 		}
 	}
 
@@ -2093,6 +2124,7 @@ func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
 			exchangeData.HyperliquidWalletAddr, exchangeData.AsterUser, exchangeData.AsterSigner, exchangeData.AsterPrivateKey,
 			exchangeData.LighterWalletAddr, exchangeData.LighterPrivateKey, exchangeData.LighterAPIKeyPrivateKey, exchangeData.LighterAPIKeyIndex,
 			exchangeData.QMTGatewayURL, exchangeData.QMTAccountID, exchangeData.QMTGatewayToken, exchangeData.QMTMarket,
+			exchangeData.AShareMarket, exchangeData.AShareTushareToken, exchangeData.AShareDataMode, exchangeData.AShareWatchlist,
 		)
 		if err != nil {
 			SafeInternalError(c, fmt.Sprintf("Update exchange %s", exchangeID), err)
@@ -2119,7 +2151,7 @@ func (s *Server) handleUpdateExchangeConfigs(c *gin.Context) {
 
 // CreateExchangeRequest request structure for creating a new exchange account
 type CreateExchangeRequest struct {
-	ExchangeType            string `json:"exchange_type" binding:"required"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt"
+	ExchangeType            string `json:"exchange_type" binding:"required"` // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt", "ashare"
 	AccountName             string `json:"account_name"`                     // User-defined account name
 	Enabled                 bool   `json:"enabled"`
 	APIKey                  string `json:"api_key"`
@@ -2138,6 +2170,10 @@ type CreateExchangeRequest struct {
 	QMTAccountID            string `json:"qmt_account_id"`
 	QMTGatewayToken         string `json:"qmt_gateway_token"`
 	QMTMarket               string `json:"qmt_market"`
+	AShareMarket            string `json:"ashare_market"`
+	AShareTushareToken      string `json:"ashare_tushare_token"`
+	AShareDataMode          string `json:"ashare_data_mode"`
+	AShareWatchlist         string `json:"ashare_watchlist"`
 }
 
 // handleCreateExchange Create a new exchange account
@@ -2194,7 +2230,7 @@ func (s *Server) handleCreateExchange(c *gin.Context) {
 	// Validate exchange type
 	validTypes := map[string]bool{
 		"binance": true, "bybit": true, "okx": true, "bitget": true,
-		"hyperliquid": true, "aster": true, "lighter": true, "gate": true, "kucoin": true, "qmt": true,
+		"hyperliquid": true, "aster": true, "lighter": true, "gate": true, "kucoin": true, "qmt": true, "ashare": true,
 	}
 	if !validTypes[req.ExchangeType] {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid exchange type: %s", req.ExchangeType)})
@@ -2208,6 +2244,7 @@ func (s *Server) handleCreateExchange(c *gin.Context) {
 		req.HyperliquidWalletAddr, req.AsterUser, req.AsterSigner, req.AsterPrivateKey,
 		req.LighterWalletAddr, req.LighterPrivateKey, req.LighterAPIKeyPrivateKey, req.LighterAPIKeyIndex,
 		req.QMTGatewayURL, req.QMTAccountID, req.QMTGatewayToken, req.QMTMarket,
+		req.AShareMarket, req.AShareTushareToken, req.AShareDataMode, req.AShareWatchlist,
 	)
 	if err != nil {
 		logger.Infof("❌ Failed to create exchange account: %v", err)
@@ -2683,6 +2720,9 @@ func (s *Server) handleKlines(c *gin.Context) {
 	case "qmt":
 		c.JSON(http.StatusBadRequest, gin.H{"error": "QMT market data requires authenticated endpoint /api/qmt/klines"})
 		return
+	case "ashare":
+		c.JSON(http.StatusBadRequest, gin.H{"error": "A-share market data requires authenticated endpoint /api/ashare/klines"})
+		return
 	case "alpaca":
 		// US Stocks via Alpaca
 		klines, err = s.getKlinesFromAlpaca(symbol, interval, limit)
@@ -2975,6 +3015,24 @@ func (s *Server) getQMTExchange(userID, exchangeID string) (*store.Exchange, err
 	return exchangeCfg, nil
 }
 
+func (s *Server) getAShareExchange(userID, exchangeID string) (*store.Exchange, error) {
+	if exchangeID == "" {
+		return nil, fmt.Errorf("exchange_id is required")
+	}
+
+	exchangeCfg, err := s.store.Exchange().GetByID(userID, exchangeID)
+	if err != nil {
+		return nil, err
+	}
+	if exchangeCfg.ExchangeType != "ashare" {
+		return nil, fmt.Errorf("exchange %s is not ashare", exchangeID)
+	}
+	if !exchangeCfg.Enabled {
+		return nil, fmt.Errorf("exchange is disabled")
+	}
+	return exchangeCfg, nil
+}
+
 func (s *Server) handleQMTKlines(c *gin.Context) {
 	userID := c.GetString("user_id")
 	exchangeID := c.Query("exchange_id")
@@ -3059,6 +3117,80 @@ func (s *Server) handleQMTSymbols(c *gin.Context) {
 	})
 }
 
+func (s *Server) handleAShareKlines(c *gin.Context) {
+	userID := c.GetString("user_id")
+	exchangeID := c.Query("exchange_id")
+	symbol := c.Query("symbol")
+	if symbol == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "symbol parameter is required"})
+		return
+	}
+
+	interval := c.DefaultQuery("interval", "5m")
+	limitStr := c.DefaultQuery("limit", "500")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 500
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+
+	exchangeCfg, err := s.getAShareExchange(userID, exchangeID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	provider := ashareprovider.NewProvider(
+		string(exchangeCfg.AShareTushareToken),
+		exchangeCfg.AShareDataMode,
+		exchangeCfg.AShareWatchlist,
+	)
+	normalizedSymbol := market.NormalizeByExchange("ashare", symbol)
+	klines, source, err := provider.GetKlines(normalizedSymbol, interval, limit)
+	if err != nil {
+		SafeInternalError(c, "Get klines from A-share provider", err)
+		return
+	}
+
+	if source != "" {
+		c.Header("X-Data-Source", source)
+	}
+	c.JSON(http.StatusOK, klines)
+}
+
+func (s *Server) handleAShareSymbols(c *gin.Context) {
+	userID := c.GetString("user_id")
+	exchangeID := c.Query("exchange_id")
+	scope := c.DefaultQuery("scope", "watchlist")
+	indexName := c.DefaultQuery("index", "hs300")
+
+	exchangeCfg, err := s.getAShareExchange(userID, exchangeID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	provider := ashareprovider.NewProvider(
+		string(exchangeCfg.AShareTushareToken),
+		exchangeCfg.AShareDataMode,
+		exchangeCfg.AShareWatchlist,
+	)
+	symbols, source, err := provider.GetSymbols(scope, indexName)
+	if err != nil {
+		SafeInternalError(c, "Get symbols from A-share provider", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"exchange": "ashare",
+		"source":   source,
+		"symbols":  symbols,
+		"count":    len(symbols),
+	})
+}
+
 // handleSymbols returns available symbols for a given exchange
 func (s *Server) handleSymbols(c *gin.Context) {
 	exchange := c.DefaultQuery("exchange", "hyperliquid")
@@ -3075,6 +3207,9 @@ func (s *Server) handleSymbols(c *gin.Context) {
 	switch strings.ToLower(exchange) {
 	case "qmt":
 		c.JSON(http.StatusBadRequest, gin.H{"error": "QMT symbols require authenticated endpoint /api/qmt/symbols"})
+		return
+	case "ashare":
+		c.JSON(http.StatusBadRequest, gin.H{"error": "A-share symbols require authenticated endpoint /api/ashare/symbols"})
 		return
 	case "hyperliquid", "hyperliquid-xyz", "xyz":
 		// Fetch symbols from Hyperliquid
@@ -3687,6 +3822,7 @@ func (s *Server) handleGetSupportedExchanges(c *gin.Context) {
 		{ExchangeType: "aster", Name: "Aster DEX", Type: "dex"},
 		{ExchangeType: "lighter", Name: "LIGHTER DEX", Type: "dex"},
 		{ExchangeType: "qmt", Name: "QMT (A Shares)", Type: "stock"},
+		{ExchangeType: "ashare", Name: "A-Share Paper", Type: "stock"},
 		{ExchangeType: "alpaca", Name: "Alpaca (US Stocks)", Type: "stock"},
 		{ExchangeType: "forex", Name: "Forex (TwelveData)", Type: "forex"},
 		{ExchangeType: "metals", Name: "Metals (TwelveData)", Type: "metals"},

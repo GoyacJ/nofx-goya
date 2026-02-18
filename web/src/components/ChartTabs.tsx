@@ -17,7 +17,7 @@ interface ChartTabsProps {
 
 type ChartTab = 'equity' | 'kline'
 type Interval = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d'
-type MarketType = 'hyperliquid' | 'crypto' | 'stocks' | 'forex' | 'metals' | 'qmt'
+type MarketType = 'hyperliquid' | 'crypto' | 'stocks' | 'forex' | 'metals' | 'qmt' | 'ashare'
 
 interface SymbolInfo {
   symbol: string
@@ -33,6 +33,7 @@ const MARKET_CONFIG = {
   forex: { exchange: 'forex', defaultSymbol: 'EUR/USD', icon: '💱', label: { zh: '外汇', en: 'Forex' }, color: 'blue', hasDropdown: false },
   metals: { exchange: 'metals', defaultSymbol: 'XAU/USD', icon: '🥇', label: { zh: '金属', en: 'Metals' }, color: 'amber', hasDropdown: false },
   qmt: { exchange: 'qmt', defaultSymbol: '000001.SZ', icon: '🏮', label: { zh: 'A股', en: 'A-Shares' }, color: 'emerald', hasDropdown: true },
+  ashare: { exchange: 'ashare', defaultSymbol: '000001.SZ', icon: '🏮', label: { zh: 'A股(模拟)', en: 'A-Shares(Paper)' }, color: 'emerald', hasDropdown: true },
 }
 
 const CRYPTO_EXCHANGES = new Set(['binance', 'bybit', 'okx', 'bitget', 'gate', 'kucoin', 'aster', 'lighter'])
@@ -87,6 +88,7 @@ function getMarketTypeFromExchange(exchangeType: string | undefined): MarketType
   if (!exchangeType) return 'hyperliquid'
   const lower = exchangeType.toLowerCase()
   if (lower === 'qmt') return 'qmt'
+  if (lower === 'ashare') return 'ashare'
   if (lower.includes('hyperliquid')) return 'hyperliquid'
   // 其他交易所默认使用 crypto 类型
   return 'crypto'
@@ -138,6 +140,19 @@ export function ChartTabs({ traderId, selectedSymbol, updateKey, exchangeType, e
           setAvailableSymbols(qmtSymbols.map((s) => ({ symbol: s, name: s, category: 'stock' })))
           if (!selectedSymbol && qmtSymbols.length > 0) {
             setChartSymbol((current) => (qmtSymbols.includes(current) ? current : qmtSymbols[0]))
+          }
+          return
+        }
+        if (marketType === 'ashare') {
+          if (!exchangeId) {
+            setAvailableSymbols([])
+            return
+          }
+          const ashareSymbols = await api.getAShareSymbols(exchangeId, 'watchlist')
+          if (!mounted) return
+          setAvailableSymbols(ashareSymbols.map((s) => ({ symbol: s, name: s, category: 'stock' })))
+          if (!selectedSymbol && ashareSymbols.length > 0) {
+            setChartSymbol((current) => (ashareSymbols.includes(current) ? current : ashareSymbols[0]))
           }
           return
         }
@@ -203,7 +218,7 @@ export function ChartTabs({ traderId, selectedSymbol, updateKey, exchangeType, e
     e.preventDefault()
     if (symbolInput.trim()) {
       let symbol = symbolInput.trim().toUpperCase()
-      if (marketType === 'qmt') {
+      if (marketType === 'qmt' || marketType === 'ashare') {
         symbol = normalizeCNSymbolInput(symbol)
       }
       // 加密货币自动加 USDT 后缀

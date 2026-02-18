@@ -775,7 +775,11 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     qmtGatewayURL?: string,
     qmtAccountID?: string,
     qmtGatewayToken?: string,
-    qmtMarket?: string
+    qmtMarket?: string,
+    ashareMarket?: string,
+    ashareTushareToken?: string,
+    ashareDataMode?: string,
+    ashareWatchlist?: string
   ) => {
     try {
       if (exchangeId) {
@@ -806,6 +810,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
               qmt_account_id: qmtAccountID || '',
               qmt_gateway_token: qmtGatewayToken || '',
               qmt_market: qmtMarket || 'CN-A',
+              ashare_market: ashareMarket || 'CN-A',
+              ashare_tushare_token: ashareTushareToken || '',
+              ashare_data_mode: ashareDataMode || 'tushare_then_go_fallback',
+              ashare_watchlist: ashareWatchlist || '',
             },
           },
         }
@@ -837,6 +845,10 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           qmt_account_id: qmtAccountID || '',
           qmt_gateway_token: qmtGatewayToken || '',
           qmt_market: qmtMarket || 'CN-A',
+          ashare_market: ashareMarket || 'CN-A',
+          ashare_tushare_token: ashareTushareToken || '',
+          ashare_data_mode: ashareDataMode || 'tushare_then_go_fallback',
+          ashare_watchlist: ashareWatchlist || '',
         }
 
         await toast.promise(api.createExchangeEncrypted(createRequest), {

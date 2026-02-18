@@ -73,7 +73,19 @@ func (df *DataFeed) loadAll() error {
 			}
 			fetchEnd := end.Add(dur)
 
-			klines, err := market.GetKlinesRange(symbol, tf, fetchStart, fetchEnd)
+			klines, err := market.GetKlinesRangeWithSource(
+				symbol,
+				tf,
+				fetchStart,
+				fetchEnd,
+				df.cfg.Market,
+				df.cfg.Exchange,
+				market.KlineSourceOptions{
+					AShareToken:     df.cfg.AShareTushareToken,
+					AShareDataMode:  df.cfg.AShareDataMode,
+					AShareWatchlist: df.cfg.AShareWatchlist,
+				},
+			)
 			if err != nil {
 				return fmt.Errorf("fetch klines for %s %s: %w", symbol, tf, err)
 			}

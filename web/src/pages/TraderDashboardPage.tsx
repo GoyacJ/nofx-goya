@@ -66,7 +66,8 @@ function getExchangeTypeFromList(
 
 function getQuoteCurrencyForExchange(exchangeType: string | undefined): string {
     if (!exchangeType) return 'USDT'
-    return exchangeType.toLowerCase() === 'qmt' ? 'CNY' : 'USDT'
+    const t = exchangeType.toLowerCase()
+    return (t === 'qmt' || t === 'ashare') ? 'CNY' : 'USDT'
 }
 
 // Helper function to check if exchange is a perp-dex type (wallet-based)

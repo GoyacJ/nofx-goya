@@ -622,6 +622,12 @@ func TestNormalizeByExchange(t *testing.T) {
 			t.Fatalf("NormalizeByExchange(qmt, %q) = %q, want %q", input, got, expected)
 		}
 	}
+	for input, expected := range qmtCases {
+		got := NormalizeByExchange("ashare", input)
+		if got != expected {
+			t.Fatalf("NormalizeByExchange(ashare, %q) = %q, want %q", input, got, expected)
+		}
+	}
 
 	// Non-QMT exchanges should keep existing crypto normalization behavior.
 	if got := NormalizeByExchange("binance", "btc"); got != "BTCUSDT" {

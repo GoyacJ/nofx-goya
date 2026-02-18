@@ -10,6 +10,7 @@ import (
 	"nofx/market"
 	"nofx/mcp"
 	"nofx/store"
+	asharepaper "nofx/trader/asharepaper"
 	"nofx/trader/aster"
 	"nofx/trader/binance"
 	"nofx/trader/bitget"
@@ -33,7 +34,7 @@ type AutoTraderConfig struct {
 	AIModel string // AI model: "qwen" or "deepseek"
 
 	// Trading platform selection
-	Exchange   string // Exchange type: "binance", "bybit", "okx", "bitget", "gate", "hyperliquid", "aster", "lighter" or "qmt"
+	Exchange   string // Exchange type: "binance", "bybit", "okx", "bitget", "gate", "hyperliquid", "aster", "lighter", "qmt" or "ashare"
 	ExchangeID string // Exchange account UUID (for multi-account support)
 
 	// Binance API configuration
@@ -92,6 +93,12 @@ type AutoTraderConfig struct {
 	QMTAccountID    string
 	QMTGatewayToken string
 	QMTMarket       string
+
+	// A-share paper configuration
+	AShareMarket       string
+	AShareTushareToken string
+	AShareDataMode     string
+	AShareWatchlist    string
 
 	// AI configuration
 	UseQwen     bool
@@ -315,6 +322,22 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize QMT trader: %w", err)
 		}
+	case "ashare":
+		logger.Infof("🏦 [%s] Using A-share Paper trading", config.Name)
+		marketName := config.AShareMarket
+		if marketName == "" {
+			marketName = "CN-A"
+		}
+		trader, err = asharepaper.NewASharePaperTrader(
+			config.AShareTushareToken,
+			config.AShareDataMode,
+			config.AShareWatchlist,
+			marketName,
+			config.ExchangeID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize A-share paper trader: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported trading platform: %s", config.Exchange)
 	}
@@ -362,10 +385,10 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	if config.StrategyConfig == nil {
 		return nil, fmt.Errorf("[%s] strategy not configured", config.Name)
 	}
-	if config.Exchange == "qmt" {
+	if config.Exchange == "qmt" || config.Exchange == "ashare" {
 		cs := config.StrategyConfig.CoinSource
 		if cs.SourceType != "static" || cs.UseAI500 || cs.UseOITop || cs.UseOILow {
-			return nil, fmt.Errorf("qmt requires coin_source.source_type=static and does not support ai500/oi sources")
+			return nil, fmt.Errorf("%s requires coin_source.source_type=static and does not support ai500/oi sources", config.Exchange)
 		}
 	}
 	strategyEngine := kernel.NewStrategyEngine(config.StrategyConfig)
@@ -960,6 +983,8 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 
 	if at.exchange == "qmt" {
 		at.populateQMTMarketData(ctx, strategyConfig)
+	} else if at.exchange == "ashare" {
+		at.populateASharePaperMarketData(ctx, strategyConfig)
 	}
 
 	// 7. Add recent closed trades (if store is available)
@@ -1020,8 +1045,8 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 		logger.Infof("⚠️ [%s] Store is nil, cannot get recent trades", at.name)
 	}
 
-	if at.exchange == "qmt" {
-		// QMT V1 uses gateway-native market data and skips crypto-only ranking/quant sources.
+	if at.exchange == "qmt" || at.exchange == "ashare" {
+		// A-share exchanges skip crypto-only ranking/quant sources.
 		return ctx, nil
 	}
 
@@ -1081,8 +1106,8 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 
 // executeDecisionWithRecord executes AI decision and records detailed information
 func (at *AutoTrader) executeDecisionWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
-	if at.exchange == "qmt" && (decision.Action == "open_short" || decision.Action == "close_short") {
-		return fmt.Errorf("qmt cash account does not support %s", decision.Action)
+	if (at.exchange == "qmt" || at.exchange == "ashare") && (decision.Action == "open_short" || decision.Action == "close_short") {
+		return fmt.Errorf("%s cash account does not support %s", at.exchange, decision.Action)
 	}
 
 	switch decision.Action {
@@ -1131,7 +1156,7 @@ func (at *AutoTrader) ExecuteDecision(d *kernel.Decision) error {
 
 func (at *AutoTrader) getMarketPriceForExecution(symbol string) (float64, error) {
 	normalized := market.NormalizeByExchange(at.exchange, symbol)
-	if at.exchange == "qmt" {
+	if at.exchange == "qmt" || at.exchange == "ashare" {
 		return at.trader.GetMarketPrice(normalized)
 	}
 
@@ -1232,6 +1257,57 @@ func (at *AutoTrader) populateQMTMarketData(ctx *kernel.Context, strategyConfig 
 		}
 
 		ctx.MarketDataMap[symbol] = data
+	}
+}
+
+func (at *AutoTrader) populateASharePaperMarketData(ctx *kernel.Context, strategyConfig *store.StrategyConfig) {
+	if ctx == nil {
+		return
+	}
+	if ctx.MarketDataMap == nil {
+		ctx.MarketDataMap = make(map[string]*market.Data)
+	}
+
+	if len(ctx.CandidateCoins) == 0 && strategyConfig != nil && strategyConfig.CoinSource.SourceType == "static" {
+		for _, coin := range strategyConfig.CoinSource.StaticCoins {
+			normalized := market.NormalizeByExchange("ashare", coin)
+			if normalized == "" {
+				continue
+			}
+			ctx.CandidateCoins = append(ctx.CandidateCoins, kernel.CandidateCoin{
+				Symbol:  normalized,
+				Sources: []string{"static"},
+			})
+		}
+	}
+
+	symbolSet := make(map[string]bool)
+	for i := range ctx.Positions {
+		normalized := market.NormalizeByExchange("ashare", ctx.Positions[i].Symbol)
+		if normalized == "" {
+			continue
+		}
+		ctx.Positions[i].Symbol = normalized
+		symbolSet[normalized] = true
+	}
+	for i := range ctx.CandidateCoins {
+		normalized := market.NormalizeByExchange("ashare", ctx.CandidateCoins[i].Symbol)
+		if normalized == "" {
+			continue
+		}
+		ctx.CandidateCoins[i].Symbol = normalized
+		symbolSet[normalized] = true
+	}
+
+	for symbol := range symbolSet {
+		price, err := at.trader.GetMarketPrice(symbol)
+		if err != nil || price <= 0 {
+			continue
+		}
+		ctx.MarketDataMap[symbol] = &market.Data{
+			Symbol:       symbol,
+			CurrentPrice: price,
+		}
 	}
 }
 
@@ -2381,7 +2457,7 @@ func (at *AutoTrader) recordOrderFill(orderRecordID int64, exchangeOrderID, symb
 // ============================================================================
 
 func quoteCurrencyForExchange(exchange string) string {
-	if strings.EqualFold(exchange, "qmt") {
+	if strings.EqualFold(exchange, "qmt") || strings.EqualFold(exchange, "ashare") {
 		return "CNY"
 	}
 	return "USDT"

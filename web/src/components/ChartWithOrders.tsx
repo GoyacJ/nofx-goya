@@ -114,12 +114,15 @@ export function ChartWithOrders({
   const fetchKlineData = async (symbol: string, interval: string): Promise<KlineData[]> => {
     try {
       const limit = 2000 // 获取最近2000根K线 (更多历史数据)
-      if (exchange === 'qmt' && !exchangeId) {
-        throw new Error('QMT exchange account is required')
+      if ((exchange === 'qmt' || exchange === 'ashare') && !exchangeId) {
+        throw new Error('A-share exchange account is required')
       }
-      const data = exchange === 'qmt'
-        ? await api.getQMTKlines(exchangeId || '', symbol, interval, limit)
-        : await api.getKlines(symbol, interval, limit, exchange)
+      const data =
+        exchange === 'qmt'
+          ? await api.getQMTKlines(exchangeId || '', symbol, interval, limit)
+          : exchange === 'ashare'
+            ? await api.getAShareKlines(exchangeId || '', symbol, interval, limit)
+            : await api.getKlines(symbol, interval, limit, exchange)
 
       // 转换后端数据格式到 lightweight-charts 格式
       // 后端返回的是 market.Kline 格式: {OpenTime, Open, High, Low, Close, Volume, ...}

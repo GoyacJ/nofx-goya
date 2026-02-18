@@ -103,6 +103,10 @@ func TestSanitizeExchangeConfigForLog(t *testing.T) {
 		QMTAccountID          string `json:"qmt_account_id"`
 		QMTGatewayToken       string `json:"qmt_gateway_token"`
 		QMTMarket             string `json:"qmt_market"`
+		AShareMarket          string `json:"ashare_market"`
+		AShareTushareToken    string `json:"ashare_tushare_token"`
+		AShareDataMode        string `json:"ashare_data_mode"`
+		AShareWatchlist       string `json:"ashare_watchlist"`
 	}{
 		"binance": {
 			Enabled:           true,

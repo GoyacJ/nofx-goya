@@ -40,6 +40,10 @@ type Exchange struct {
 	QMTAccountID            string                 `gorm:"column:qmt_account_id;default:''" json:"qmtAccountId"`
 	QMTGatewayToken         crypto.EncryptedString `gorm:"column:qmt_gateway_token;default:''" json:"qmtGatewayToken"`
 	QMTMarket               string                 `gorm:"column:qmt_market;default:'CN-A'" json:"qmtMarket"`
+	AShareMarket            string                 `gorm:"column:ashare_market;default:'CN-A'" json:"ashareMarket"`
+	AShareTushareToken      crypto.EncryptedString `gorm:"column:ashare_tushare_token;default:''" json:"ashareTushareToken"`
+	AShareDataMode          string                 `gorm:"column:ashare_data_mode;default:'tushare_then_go_fallback'" json:"ashareDataMode"`
+	AShareWatchlist         string                 `gorm:"column:ashare_watchlist;default:''" json:"ashareWatchlist"`
 	CreatedAt               time.Time              `json:"created_at"`
 	UpdatedAt               time.Time              `json:"updated_at"`
 }
@@ -60,6 +64,7 @@ func (s *ExchangeStore) initTables() error {
 			// Still run data migrations
 			s.migrateToMultiAccount()
 			s.migrateQMTColumns()
+			s.migrateAShareColumns()
 			s.db.Model(&Exchange{}).Where("account_name = '' OR account_name IS NULL").Update("account_name", "Default")
 			return nil
 		}
@@ -75,6 +80,9 @@ func (s *ExchangeStore) initTables() error {
 	}
 	if err := s.migrateQMTColumns(); err != nil {
 		logger.Warnf("QMT migration warning: %v", err)
+	}
+	if err := s.migrateAShareColumns(); err != nil {
+		logger.Warnf("A-share migration warning: %v", err)
 	}
 
 	// Fix empty account_name for existing records
@@ -93,6 +101,26 @@ func (s *ExchangeStore) migrateQMTColumns() error {
 		`ALTER TABLE exchanges ADD COLUMN IF NOT EXISTS qmt_account_id TEXT DEFAULT ''`,
 		`ALTER TABLE exchanges ADD COLUMN IF NOT EXISTS qmt_gateway_token TEXT DEFAULT ''`,
 		`ALTER TABLE exchanges ADD COLUMN IF NOT EXISTS qmt_market TEXT DEFAULT 'CN-A'`,
+	}
+
+	for _, stmt := range alterStatements {
+		if err := s.db.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *ExchangeStore) migrateAShareColumns() error {
+	if s.db.Dialector.Name() != "postgres" {
+		return nil
+	}
+
+	alterStatements := []string{
+		`ALTER TABLE exchanges ADD COLUMN IF NOT EXISTS ashare_market TEXT DEFAULT 'CN-A'`,
+		`ALTER TABLE exchanges ADD COLUMN IF NOT EXISTS ashare_tushare_token TEXT DEFAULT ''`,
+		`ALTER TABLE exchanges ADD COLUMN IF NOT EXISTS ashare_data_mode TEXT DEFAULT 'tushare_then_go_fallback'`,
+		`ALTER TABLE exchanges ADD COLUMN IF NOT EXISTS ashare_watchlist TEXT DEFAULT ''`,
 	}
 
 	for _, stmt := range alterStatements {
@@ -203,6 +231,8 @@ func getExchangeNameAndType(exchangeType string) (name string, typ string) {
 		return "LIGHTER DEX", "dex"
 	case "qmt":
 		return "QMT (A Shares)", "stock"
+	case "ashare":
+		return "A-Share (Data+Paper)", "stock"
 	default:
 		return exchangeType + " Exchange", "cex"
 	}
@@ -213,7 +243,8 @@ func (s *ExchangeStore) Create(userID, exchangeType, accountName string, enabled
 	apiKey, secretKey, passphrase string, testnet bool,
 	hyperliquidWalletAddr, asterUser, asterSigner, asterPrivateKey,
 	lighterWalletAddr, lighterPrivateKey, lighterApiKeyPrivateKey string, lighterApiKeyIndex int,
-	qmtGatewayURL, qmtAccountID, qmtGatewayToken, qmtMarket string) (string, error) {
+	qmtGatewayURL, qmtAccountID, qmtGatewayToken, qmtMarket string,
+	ashareMarket, ashareTushareToken, ashareDataMode, ashareWatchlist string) (string, error) {
 
 	id := uuid.New().String()
 	name, typ := getExchangeNameAndType(exchangeType)
@@ -227,6 +258,14 @@ func (s *ExchangeStore) Create(userID, exchangeType, accountName string, enabled
 
 	if exchangeType == "qmt" && qmtMarket == "" {
 		qmtMarket = "CN-A"
+	}
+	if exchangeType == "ashare" {
+		if ashareMarket == "" {
+			ashareMarket = "CN-A"
+		}
+		if ashareDataMode == "" {
+			ashareDataMode = "tushare_then_go_fallback"
+		}
 	}
 
 	exchange := &Exchange{
@@ -253,6 +292,10 @@ func (s *ExchangeStore) Create(userID, exchangeType, accountName string, enabled
 		QMTAccountID:            qmtAccountID,
 		QMTGatewayToken:         crypto.EncryptedString(qmtGatewayToken),
 		QMTMarket:               qmtMarket,
+		AShareMarket:            ashareMarket,
+		AShareTushareToken:      crypto.EncryptedString(ashareTushareToken),
+		AShareDataMode:          ashareDataMode,
+		AShareWatchlist:         ashareWatchlist,
 	}
 
 	if err := s.db.Create(exchange).Error; err != nil {
@@ -264,7 +307,8 @@ func (s *ExchangeStore) Create(userID, exchangeType, accountName string, enabled
 // Update updates exchange configuration by UUID
 func (s *ExchangeStore) Update(userID, id string, enabled bool, apiKey, secretKey, passphrase string, testnet bool,
 	hyperliquidWalletAddr, asterUser, asterSigner, asterPrivateKey, lighterWalletAddr, lighterPrivateKey, lighterApiKeyPrivateKey string, lighterApiKeyIndex int,
-	qmtGatewayURL, qmtAccountID, qmtGatewayToken, qmtMarket string) error {
+	qmtGatewayURL, qmtAccountID, qmtGatewayToken, qmtMarket string,
+	ashareMarket, ashareTushareToken, ashareDataMode, ashareWatchlist string) error {
 
 	logger.Debugf("🔧 ExchangeStore.Update: userID=%s, id=%s, enabled=%v", userID, id, enabled)
 
@@ -279,6 +323,9 @@ func (s *ExchangeStore) Update(userID, id string, enabled bool, apiKey, secretKe
 		"qmt_gateway_url":         qmtGatewayURL,
 		"qmt_account_id":          qmtAccountID,
 		"qmt_market":              qmtMarket,
+		"ashare_market":           ashareMarket,
+		"ashare_data_mode":        ashareDataMode,
+		"ashare_watchlist":        ashareWatchlist,
 		"updated_at":              time.Now().UTC(),
 	}
 
@@ -303,6 +350,9 @@ func (s *ExchangeStore) Update(userID, id string, enabled bool, apiKey, secretKe
 	}
 	if qmtGatewayToken != "" {
 		updates["qmt_gateway_token"] = crypto.EncryptedString(qmtGatewayToken)
+	}
+	if ashareTushareToken != "" {
+		updates["ashare_tushare_token"] = crypto.EncryptedString(ashareTushareToken)
 	}
 
 	result := s.db.Model(&Exchange{}).Where("id = ? AND user_id = ?", id, userID).Updates(updates)
@@ -353,7 +403,7 @@ func (s *ExchangeStore) CreateLegacy(userID, id, name, typ string, enabled bool,
 	// Check if this is an old-style ID (exchange type as ID)
 	if id == "binance" || id == "bybit" || id == "okx" || id == "bitget" || id == "hyperliquid" || id == "aster" || id == "lighter" {
 		_, err := s.Create(userID, id, "Default", enabled, apiKey, secretKey, "", testnet,
-			hyperliquidWalletAddr, asterUser, asterSigner, asterPrivateKey, "", "", "", 0, "", "", "", "")
+			hyperliquidWalletAddr, asterUser, asterSigner, asterPrivateKey, "", "", "", 0, "", "", "", "", "", "", "", "")
 		return err
 	}
 

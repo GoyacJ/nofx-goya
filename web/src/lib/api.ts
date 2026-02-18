@@ -540,6 +540,45 @@ export const api = {
     return Array.isArray(result.data?.symbols) ? result.data!.symbols : []
   },
 
+  // Protected A-share market data (account-scoped via exchange_id)
+  async getAShareKlines(
+    exchangeId: string,
+    symbol: string,
+    interval: string = '5m',
+    limit: number = 500
+  ): Promise<any[]> {
+    const query = new URLSearchParams({
+      exchange_id: exchangeId,
+      symbol,
+      interval,
+      limit: String(limit),
+    })
+    const result = await httpClient.get<any[]>(
+      `${API_BASE}/ashare/klines?${query.toString()}`
+    )
+    if (!result.success) throw new Error(result.message || '获取A股 K线失败')
+    return Array.isArray(result.data) ? result.data : []
+  },
+
+  async getAShareSymbols(
+    exchangeId: string,
+    scope: 'watchlist' | 'index' | 'all' = 'watchlist',
+    indexName?: string
+  ): Promise<string[]> {
+    const query = new URLSearchParams({
+      exchange_id: exchangeId,
+      scope,
+    })
+    if (scope === 'index' && indexName) {
+      query.set('index', indexName)
+    }
+    const result = await httpClient.get<{ symbols: string[] }>(
+      `${API_BASE}/ashare/symbols?${query.toString()}`
+    )
+    if (!result.success) throw new Error(result.message || '获取A股标的失败')
+    return Array.isArray(result.data?.symbols) ? result.data!.symbols : []
+  },
+
   // 获取服务器IP（需要认证，用于白名单配置）
   async getServerIP(): Promise<{
     public_ip: string

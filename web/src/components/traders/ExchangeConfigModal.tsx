@@ -31,6 +31,7 @@ const SUPPORTED_EXCHANGE_TEMPLATES = [
   { exchange_type: 'aster', name: 'Aster DEX', type: 'dex' as const },
   { exchange_type: 'lighter', name: 'Lighter', type: 'dex' as const },
   { exchange_type: 'qmt', name: 'QMT A-Shares', type: 'stock' as const },
+  { exchange_type: 'ashare', name: 'A-Share Paper', type: 'stock' as const },
 ]
 
 const TESTNET_SUPPORTED_EXCHANGES = new Set([
@@ -67,7 +68,11 @@ interface ExchangeConfigModalProps {
     qmtGatewayURL?: string,
     qmtAccountID?: string,
     qmtGatewayToken?: string,
-    qmtMarket?: string
+    qmtMarket?: string,
+    ashareMarket?: string,
+    ashareTushareToken?: string,
+    ashareDataMode?: string,
+    ashareWatchlist?: string
   ) => Promise<void>
   onDelete: (exchangeId: string) => void
   onClose: () => void
@@ -209,9 +214,13 @@ export function ExchangeConfigModal({
   const [qmtAccountID, setQMTAccountID] = useState('')
   const [qmtGatewayToken, setQMTGatewayToken] = useState('')
   const [qmtMarket, setQMTMarket] = useState('CN-A')
+  const [ashareMarket, setAShareMarket] = useState('CN-A')
+  const [ashareTushareToken, setAShareTushareToken] = useState('')
+  const [ashareDataMode, setAShareDataMode] = useState('tushare_then_go_fallback')
+  const [ashareWatchlist, setAShareWatchlist] = useState('')
 
   // Other state
-  const [secureInputTarget, setSecureInputTarget] = useState<null | 'hyperliquid' | 'aster' | 'lighter' | 'qmt'>(null)
+  const [secureInputTarget, setSecureInputTarget] = useState<null | 'hyperliquid' | 'aster' | 'lighter' | 'qmt' | 'ashare'>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [accountName, setAccountName] = useState('')
 
@@ -227,7 +236,7 @@ export function ExchangeConfigModal({
     ? selectedExchange?.exchange_type
     : selectedExchangeType
   const supportsTestnet = !!currentExchangeType && TESTNET_SUPPORTED_EXCHANGES.has(currentExchangeType)
-  const showEnvironmentMode = !!currentExchangeType && currentExchangeType !== 'qmt'
+  const showEnvironmentMode = !!currentExchangeType && currentExchangeType !== 'qmt' && currentExchangeType !== 'ashare'
 
   const exchangeRegistrationLinks: Record<string, { url: string; hasReferral?: boolean }> = {
     binance: { url: 'https://www.binance.com/join?ref=NOFXENG', hasReferral: true },
@@ -240,6 +249,7 @@ export function ExchangeConfigModal({
     aster: { url: 'https://www.asterdex.com/en/referral/fdfc0e', hasReferral: true },
     lighter: { url: 'https://app.lighter.xyz/?referral=68151432', hasReferral: true },
     qmt: { url: 'https://www.thinktrader.net/', hasReferral: false },
+    ashare: { url: 'https://tushare.pro/', hasReferral: false },
   }
 
   // Initialize form when editing
@@ -261,6 +271,10 @@ export function ExchangeConfigModal({
       setQMTAccountID(selectedExchange.qmtAccountId || '')
       setQMTGatewayToken('')
       setQMTMarket(selectedExchange.qmtMarket || 'CN-A')
+      setAShareMarket(selectedExchange.ashareMarket || 'CN-A')
+      setAShareTushareToken('')
+      setAShareDataMode(selectedExchange.ashareDataMode || 'tushare_then_go_fallback')
+      setAShareWatchlist(selectedExchange.ashareWatchlist || '')
     }
   }, [editingExchangeId, selectedExchange])
 
@@ -320,6 +334,7 @@ export function ExchangeConfigModal({
       toast.success(t('lighterApiKeyImported', language))
     }
     if (secureInputTarget === 'qmt') setQMTGatewayToken(trimmed)
+    if (secureInputTarget === 'ashare') setAShareTushareToken(trimmed)
     setSecureInputTarget(null)
   }
 
@@ -397,6 +412,36 @@ export function ExchangeConfigModal({
           qmtAccountID.trim(),
           qmtGatewayToken.trim(),
           qmtMarket.trim() || 'CN-A',
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        )
+      } else if (currentExchangeType === 'ashare') {
+        await onSave(
+          exchangeId,
+          exchangeType,
+          trimmedAccountName,
+          '',
+          '',
+          '',
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ashareMarket.trim() || 'CN-A',
+          ashareTushareToken.trim(),
+          ashareDataMode.trim() || 'tushare_then_go_fallback',
+          ashareWatchlist.trim(),
         )
       } else {
         if (!apiKey.trim() || !secretKey.trim()) return
@@ -932,6 +977,89 @@ export function ExchangeConfigModal({
                       className="w-full px-4 py-3 rounded-xl"
                       style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
                       required
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* A-share Paper Fields */}
+              {currentExchangeType === 'ashare' && (
+                <>
+                  <div className="p-4 rounded-xl" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                    <div className="flex items-start gap-2">
+                      <span style={{ fontSize: '16px' }}>🏮</span>
+                      <div>
+                        <div className="text-sm font-semibold mb-1" style={{ color: '#10B981' }}>
+                          {language === 'zh' ? 'A股数据配置（非QMT）' : 'A-share Data Setup (Non-QMT)'}
+                        </div>
+                        <div className="text-xs" style={{ color: '#848E9C' }}>
+                          {language === 'zh'
+                            ? '支持 Tushare 主源 + 纯 Go 备源。可不填 Token，仅使用备源。'
+                            : 'Supports Tushare primary source + pure Go fallback. Token is optional for fallback-only mode.'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                      {language === 'zh' ? '市场标识' : 'Market'} *
+                    </label>
+                    <input
+                      type="text"
+                      value={ashareMarket}
+                      onChange={(e) => setAShareMarket(e.target.value)}
+                      placeholder="CN-A"
+                      className="w-full px-4 py-3 rounded-xl"
+                      style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                      {language === 'zh' ? '数据模式' : 'Data Mode'} *
+                    </label>
+                    <select
+                      value={ashareDataMode}
+                      onChange={(e) => setAShareDataMode(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl"
+                      style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                    >
+                      <option value="tushare_then_go_fallback">tushare_then_go_fallback</option>
+                      <option value="tushare_only">tushare_only</option>
+                      <option value="go_fallback_only">go_fallback_only</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                      {language === 'zh' ? 'Tushare Token（可选）' : 'Tushare Token (Optional)'}
+                      <button type="button" onClick={() => setSecureInputTarget('ashare')} className="text-xs underline" style={{ color: '#10B981' }}>
+                        {t('secureInputButton', language)}
+                      </button>
+                    </label>
+                    <input
+                      type="password"
+                      value={ashareTushareToken}
+                      onChange={(e) => setAShareTushareToken(e.target.value)}
+                      placeholder={language === 'zh' ? '输入 Tushare Token（可留空）' : 'Enter Tushare token (optional)'}
+                      className="w-full px-4 py-3 rounded-xl font-mono"
+                      style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold" style={{ color: '#EAECEF' }}>
+                      {language === 'zh' ? '自选股列表（可选）' : 'Watchlist (Optional)'}
+                    </label>
+                    <input
+                      type="text"
+                      value={ashareWatchlist}
+                      onChange={(e) => setAShareWatchlist(e.target.value)}
+                      placeholder={language === 'zh' ? '例: 600519.SH,000001.SZ' : 'e.g. 600519.SH,000001.SZ'}
+                      className="w-full px-4 py-3 rounded-xl"
+                      style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
                     />
                   </div>
                 </>

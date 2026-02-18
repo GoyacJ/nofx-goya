@@ -727,6 +727,11 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 		traderConfig.QMTAccountID = exchangeCfg.QMTAccountID
 		traderConfig.QMTGatewayToken = string(exchangeCfg.QMTGatewayToken)
 		traderConfig.QMTMarket = exchangeCfg.QMTMarket
+	case "ashare":
+		traderConfig.AShareMarket = exchangeCfg.AShareMarket
+		traderConfig.AShareTushareToken = string(exchangeCfg.AShareTushareToken)
+		traderConfig.AShareDataMode = exchangeCfg.AShareDataMode
+		traderConfig.AShareWatchlist = exchangeCfg.AShareWatchlist
 	}
 
 	// Set API keys based on AI model (convert EncryptedString to string)

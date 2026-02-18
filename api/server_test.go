@@ -400,6 +400,95 @@ func TestSafeExchangeConfig_QMTTokenExcluded(t *testing.T) {
 	}
 }
 
+func TestCreateExchangeRequest_AShareFields(t *testing.T) {
+	payload := `{
+		"exchange_type": "ashare",
+		"account_name": "Ashare Paper",
+		"enabled": true,
+		"ashare_market": "CN-A",
+		"ashare_tushare_token": "tushare-token",
+		"ashare_data_mode": "tushare_then_go_fallback",
+		"ashare_watchlist": "600519.SH,000001.SZ"
+	}`
+
+	var req CreateExchangeRequest
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if req.ExchangeType != "ashare" {
+		t.Fatalf("expected exchange_type=ashare, got %q", req.ExchangeType)
+	}
+	if req.AShareMarket != "CN-A" {
+		t.Fatalf("unexpected ashare_market: %q", req.AShareMarket)
+	}
+	if req.AShareTushareToken != "tushare-token" {
+		t.Fatalf("unexpected ashare_tushare_token: %q", req.AShareTushareToken)
+	}
+	if req.AShareDataMode != "tushare_then_go_fallback" {
+		t.Fatalf("unexpected ashare_data_mode: %q", req.AShareDataMode)
+	}
+	if req.AShareWatchlist != "600519.SH,000001.SZ" {
+		t.Fatalf("unexpected ashare_watchlist: %q", req.AShareWatchlist)
+	}
+}
+
+func TestUpdateExchangeConfigRequest_AShareFields(t *testing.T) {
+	payload := `{
+		"exchanges": {
+			"ex-ashare": {
+				"enabled": true,
+				"ashare_market": "CN-A",
+				"ashare_tushare_token": "token-xyz",
+				"ashare_data_mode": "go_fallback_only",
+				"ashare_watchlist": "600519.SH,300750.SZ"
+			}
+		}
+	}`
+
+	var req UpdateExchangeConfigRequest
+	if err := json.Unmarshal([]byte(payload), &req); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	cfg, ok := req.Exchanges["ex-ashare"]
+	if !ok {
+		t.Fatalf("expected exchange config ex-ashare")
+	}
+	if cfg.AShareMarket != "CN-A" {
+		t.Fatalf("unexpected ashare_market: %q", cfg.AShareMarket)
+	}
+	if cfg.AShareTushareToken != "token-xyz" {
+		t.Fatalf("unexpected ashare_tushare_token: %q", cfg.AShareTushareToken)
+	}
+	if cfg.AShareDataMode != "go_fallback_only" {
+		t.Fatalf("unexpected ashare_data_mode: %q", cfg.AShareDataMode)
+	}
+	if cfg.AShareWatchlist != "600519.SH,300750.SZ" {
+		t.Fatalf("unexpected ashare_watchlist: %q", cfg.AShareWatchlist)
+	}
+}
+
+func TestSafeExchangeConfig_AShareTokenExcluded(t *testing.T) {
+	safe := SafeExchangeConfig{
+		ExchangeType:    "ashare",
+		AccountName:     "Ashare Paper",
+		AShareMarket:    "CN-A",
+		AShareDataMode:  "tushare_then_go_fallback",
+		AShareWatchlist: "600519.SH,000001.SZ",
+	}
+
+	data, err := json.Marshal(safe)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	jsonStr := string(data)
+	if strings.Contains(jsonStr, "ashare_tushare_token") || strings.Contains(jsonStr, "ashareTushareToken") {
+		t.Fatalf("safe config should not expose ashare token, got: %s", jsonStr)
+	}
+}
+
 func newWebRouteTestServer(webFS fstest.MapFS) *Server {
 	gin.SetMode(gin.TestMode)
 

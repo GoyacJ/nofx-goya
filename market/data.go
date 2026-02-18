@@ -1172,7 +1172,7 @@ func NormalizeCN(symbol string) string {
 
 // NormalizeByExchange normalizes symbols using exchange-specific rules.
 func NormalizeByExchange(exchangeType, symbol string) string {
-	if strings.EqualFold(exchangeType, "qmt") {
+	if strings.EqualFold(exchangeType, "qmt") || strings.EqualFold(exchangeType, "ashare") {
 		return NormalizeCN(symbol)
 	}
 	return Normalize(symbol)

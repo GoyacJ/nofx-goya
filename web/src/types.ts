@@ -118,7 +118,7 @@ export interface AIModel {
 
 export interface Exchange {
   id: string                     // UUID (empty for supported exchange templates)
-  exchange_type: string          // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt"
+  exchange_type: string          // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt", "ashare"
   account_name: string           // User-defined account name
   name: string                   // Display name
   type: 'cex' | 'dex' | 'stock'
@@ -142,10 +142,14 @@ export interface Exchange {
   qmtGatewayUrl?: string
   qmtAccountId?: string
   qmtMarket?: string
+  // A-share specific
+  ashareMarket?: string
+  ashareDataMode?: string
+  ashareWatchlist?: string
 }
 
 export interface CreateExchangeRequest {
-  exchange_type: string          // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt"
+  exchange_type: string          // "binance", "bybit", "okx", "hyperliquid", "aster", "lighter", "qmt", "ashare"
   account_name: string           // User-defined account name
   enabled: boolean
   api_key?: string
@@ -164,6 +168,10 @@ export interface CreateExchangeRequest {
   qmt_account_id?: string
   qmt_gateway_token?: string
   qmt_market?: string
+  ashare_market?: string
+  ashare_tushare_token?: string
+  ashare_data_mode?: string
+  ashare_watchlist?: string
 }
 
 export interface CreateTraderRequest {
@@ -240,6 +248,10 @@ export interface UpdateExchangeConfigRequest {
       qmt_account_id?: string
       qmt_gateway_token?: string
       qmt_market?: string
+      ashare_market?: string
+      ashare_tushare_token?: string
+      ashare_data_mode?: string
+      ashare_watchlist?: string
     }
   }
 }
@@ -402,6 +414,9 @@ export interface BacktestStartConfig {
   run_id?: string;
   ai_model_id?: string;
   strategy_id?: string; // Optional: use saved strategy from Strategy Studio
+  market?: 'crypto' | 'ashare';
+  exchange?: string;
+  ashare_exchange_id?: string;
   symbols: string[];
   timeframes: string[];
   decision_timeframe: string;

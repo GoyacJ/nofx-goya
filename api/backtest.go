@@ -110,6 +110,11 @@ func (s *Server) handleBacktestStart(c *gin.Context) {
 		}
 	}
 
+	if err := s.hydrateBacktestMarketConfig(&cfg, cfg.UserID); err != nil {
+		SafeBadRequest(c, err.Error())
+		return
+	}
+
 	if err := s.hydrateBacktestAIConfig(&cfg); err != nil {
 		SafeBadRequest(c, "Failed to configure AI model")
 		return
@@ -534,7 +539,19 @@ func (s *Server) handleBacktestKlines(c *gin.Context) {
 	startTime := time.Unix(cfg.StartTS, 0)
 	endTime := time.Unix(cfg.EndTS, 0)
 
-	klines, err := market.GetKlinesRange(symbol, timeframe, startTime, endTime)
+	klines, err := market.GetKlinesRangeWithSource(
+		symbol,
+		timeframe,
+		startTime,
+		endTime,
+		cfg.Market,
+		cfg.Exchange,
+		market.KlineSourceOptions{
+			AShareToken:     cfg.AShareTushareToken,
+			AShareDataMode:  cfg.AShareDataMode,
+			AShareWatchlist: cfg.AShareWatchlist,
+		},
+	)
 	if err != nil {
 		SafeInternalError(c, "Fetch klines", err)
 		return
@@ -860,4 +877,70 @@ func (s *Server) hydrateBacktestAIConfig(cfg *backtest.BacktestConfig) error {
 	}
 
 	return nil
+}
+
+func (s *Server) hydrateBacktestMarketConfig(cfg *backtest.BacktestConfig, userID string) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	cfg.UserID = normalizeUserID(userID)
+
+	cfg.Market = strings.ToLower(strings.TrimSpace(cfg.Market))
+	cfg.Exchange = strings.ToLower(strings.TrimSpace(cfg.Exchange))
+
+	if cfg.Market == "" {
+		if looksLikeAShareSymbols(cfg.Symbols) {
+			cfg.Market = "ashare"
+		} else {
+			cfg.Market = "crypto"
+		}
+	}
+	if cfg.Exchange == "" {
+		if cfg.Market == "ashare" {
+			cfg.Exchange = "ashare"
+		} else {
+			cfg.Exchange = "binance"
+		}
+	}
+
+	if cfg.Market != "ashare" {
+		return nil
+	}
+
+	if cfg.Exchange != "ashare" {
+		cfg.Exchange = "ashare"
+	}
+
+	if strings.TrimSpace(cfg.AShareExchangeID) == "" {
+		return nil
+	}
+	if s.store == nil {
+		return fmt.Errorf("system database not ready, cannot load ashare exchange config")
+	}
+
+	exchangeCfg, err := s.store.Exchange().GetByID(cfg.UserID, cfg.AShareExchangeID)
+	if err != nil {
+		return fmt.Errorf("failed to load ashare exchange config: %w", err)
+	}
+	if exchangeCfg.ExchangeType != "ashare" {
+		return fmt.Errorf("exchange %s is not ashare", cfg.AShareExchangeID)
+	}
+	cfg.AShareTushareToken = strings.TrimSpace(string(exchangeCfg.AShareTushareToken))
+	cfg.AShareDataMode = strings.TrimSpace(exchangeCfg.AShareDataMode)
+	cfg.AShareWatchlist = strings.TrimSpace(exchangeCfg.AShareWatchlist)
+	return nil
+}
+
+func looksLikeAShareSymbols(symbols []string) bool {
+	for _, raw := range symbols {
+		s := strings.TrimSpace(raw)
+		if s == "" {
+			continue
+		}
+		norm := market.NormalizeCN(s)
+		if strings.HasSuffix(norm, ".SH") || strings.HasSuffix(norm, ".SZ") {
+			return true
+		}
+	}
+	return false
 }

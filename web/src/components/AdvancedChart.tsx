@@ -69,7 +69,7 @@ const getQuoteUnit = (exchange: string): string => {
   if (['alpaca'].includes(exchange)) {
     return 'USD'
   }
-  if (['qmt'].includes(exchange)) {
+  if (['qmt', 'ashare'].includes(exchange)) {
     return 'CNY'
   }
   if (['forex', 'metals'].includes(exchange)) {
@@ -80,7 +80,7 @@ const getQuoteUnit = (exchange: string): string => {
 
 // 获取成交量数量单位
 const getBaseUnit = (exchange: string, symbol: string): string => {
-  if (['alpaca', 'qmt'].includes(exchange)) {
+  if (['alpaca', 'qmt', 'ashare'].includes(exchange)) {
     return '股'
   }
   if (['forex', 'metals'].includes(exchange)) {
@@ -157,12 +157,15 @@ export function AdvancedChart({
   const fetchKlineData = async (symbol: string, interval: string) => {
     try {
       const limit = 1500
-      if (exchange === 'qmt' && !exchangeId) {
-        throw new Error('QMT exchange account is required')
+      if ((exchange === 'qmt' || exchange === 'ashare') && !exchangeId) {
+        throw new Error('A-share exchange account is required')
       }
-      const rawKlines = exchange === 'qmt'
-        ? await api.getQMTKlines(exchangeId || '', symbol, interval, limit)
-        : await api.getKlines(symbol, interval, limit, exchange)
+      const rawKlines =
+        exchange === 'qmt'
+          ? await api.getQMTKlines(exchangeId || '', symbol, interval, limit)
+          : exchange === 'ashare'
+            ? await api.getAShareKlines(exchangeId || '', symbol, interval, limit)
+            : await api.getKlines(symbol, interval, limit, exchange)
 
       // 转换数据格式
       const rawData = rawKlines.map((candle: any) => ({

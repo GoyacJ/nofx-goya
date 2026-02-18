@@ -50,6 +50,10 @@ func SanitizeExchangeConfigForLog(exchanges map[string]struct {
 	QMTAccountID          string `json:"qmt_account_id"`
 	QMTGatewayToken       string `json:"qmt_gateway_token"`
 	QMTMarket             string `json:"qmt_market"`
+	AShareMarket          string `json:"ashare_market"`
+	AShareTushareToken    string `json:"ashare_tushare_token"`
+	AShareDataMode        string `json:"ashare_data_mode"`
+	AShareWatchlist       string `json:"ashare_watchlist"`
 }) map[string]interface{} {
 	safe := make(map[string]interface{})
 	for exchangeID, cfg := range exchanges {
@@ -74,6 +78,9 @@ func SanitizeExchangeConfigForLog(exchanges map[string]struct {
 		if cfg.QMTGatewayToken != "" {
 			safeExchange["qmt_gateway_token"] = MaskSensitiveString(cfg.QMTGatewayToken)
 		}
+		if cfg.AShareTushareToken != "" {
+			safeExchange["ashare_tushare_token"] = MaskSensitiveString(cfg.AShareTushareToken)
+		}
 
 		// Add non-sensitive fields directly
 		if cfg.HyperliquidWalletAddr != "" {
@@ -96,6 +103,15 @@ func SanitizeExchangeConfigForLog(exchanges map[string]struct {
 		}
 		if cfg.QMTMarket != "" {
 			safeExchange["qmt_market"] = cfg.QMTMarket
+		}
+		if cfg.AShareMarket != "" {
+			safeExchange["ashare_market"] = cfg.AShareMarket
+		}
+		if cfg.AShareDataMode != "" {
+			safeExchange["ashare_data_mode"] = cfg.AShareDataMode
+		}
+		if cfg.AShareWatchlist != "" {
+			safeExchange["ashare_watchlist"] = cfg.AShareWatchlist
 		}
 
 		safe[exchangeID] = safeExchange

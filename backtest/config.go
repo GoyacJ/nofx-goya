@@ -30,6 +30,12 @@ type BacktestConfig struct {
 	UserID               string   `json:"user_id,omitempty"`
 	AIModelID            string   `json:"ai_model_id,omitempty"`
 	StrategyID           string   `json:"strategy_id,omitempty"` // Optional: use saved strategy from Strategy Studio
+	Market               string   `json:"market,omitempty"`      // crypto|ashare
+	Exchange             string   `json:"exchange,omitempty"`    // binance|ashare|...
+	AShareExchangeID     string   `json:"ashare_exchange_id,omitempty"`
+	AShareTushareToken   string   `json:"-"`
+	AShareDataMode       string   `json:"-"`
+	AShareWatchlist      string   `json:"-"`
 	Symbols              []string `json:"symbols"`
 	Timeframes           []string `json:"timeframes"`
 	DecisionTimeframe    string   `json:"decision_timeframe"`
@@ -77,8 +83,29 @@ func (cfg *BacktestConfig) Validate() error {
 	if len(cfg.Symbols) == 0 {
 		return fmt.Errorf("at least one symbol is required")
 	}
+	cfg.Market = strings.ToLower(strings.TrimSpace(cfg.Market))
+	cfg.Exchange = strings.ToLower(strings.TrimSpace(cfg.Exchange))
+	if cfg.Market == "" {
+		if inferAShareFromSymbols(cfg.Symbols) {
+			cfg.Market = "ashare"
+		} else {
+			cfg.Market = "crypto"
+		}
+	}
+	switch cfg.Market {
+	case "crypto", "ashare":
+	default:
+		return fmt.Errorf("unsupported market: %s", cfg.Market)
+	}
+	if cfg.Exchange == "" {
+		if cfg.Market == "ashare" {
+			cfg.Exchange = "ashare"
+		} else {
+			cfg.Exchange = "binance"
+		}
+	}
 	for i, sym := range cfg.Symbols {
-		cfg.Symbols[i] = market.Normalize(sym)
+		cfg.Symbols[i] = market.NormalizeByExchange(cfg.Exchange, sym)
 	}
 
 	if len(cfg.Timeframes) == 0 {
@@ -154,6 +181,20 @@ func (cfg *BacktestConfig) Validate() error {
 	}
 
 	return nil
+}
+
+func inferAShareFromSymbols(symbols []string) bool {
+	for _, raw := range symbols {
+		sym := strings.TrimSpace(raw)
+		if sym == "" {
+			continue
+		}
+		normalized := market.NormalizeCN(sym)
+		if strings.HasSuffix(normalized, ".SH") || strings.HasSuffix(normalized, ".SZ") {
+			return true
+		}
+	}
+	return false
 }
 
 // Duration returns the backtest interval duration.
@@ -241,12 +282,12 @@ func (cfg *BacktestConfig) ToStrategyConfig() *store.StrategyConfig {
 
 	return &store.StrategyConfig{
 		CoinSource: store.CoinSourceConfig{
-			SourceType: "static",
+			SourceType:  "static",
 			StaticCoins: cfg.Symbols,
-			UseAI500:   false,
-			AI500Limit: len(cfg.Symbols),
-			UseOITop:   false,
-			OITopLimit: 0,
+			UseAI500:    false,
+			AI500Limit:  len(cfg.Symbols),
+			UseOITop:    false,
+			OITopLimit:  0,
 		},
 		Indicators: store.IndicatorConfig{
 			Klines: store.KlineConfig{
